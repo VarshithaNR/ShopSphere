@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 function ProductCard({ product }) {
   return (
     <div
@@ -9,28 +11,36 @@ function ProductCard({ product }) {
         margin: "10px",
       }}
     >
-      <img
-        src={product.image}
-        alt={product.name}
+      <Link
+        to={`/products/${product._id}`}
         style={{
-          width: "100%",
-          height: "200px",
-          objectFit: "cover",
-          borderRadius: "8px",
+          textDecoration: "none",
+          color: "inherit",
         }}
-      />
+      >
+        <img
+          src={product.image}
+          alt={product.name}
+          style={{
+            width: "100%",
+            height: "200px",
+            objectFit: "cover",
+            borderRadius: "8px",
+          }}
+        />
 
-      <h2>{product.name}</h2>
+        <h2>{product.name}</h2>
 
-      <p>{product.description}</p>
+        <p>{product.description}</p>
 
-      <h3>₹{product.price}</h3>
+        <h3>₹{product.price}</h3>
 
-      <p>Brand: {product.brand}</p>
+        <p>Brand: {product.brand}</p>
 
-      <p>⭐ {product.rating}</p>
+        <p>⭐ {product.rating}</p>
 
-      <p>Stock: {product.stock}</p>
+        <p>Stock: {product.stock}</p>
+      </Link>
     </div>
   );
 }
