@@ -7,11 +7,25 @@ function AdminOrders() {
 
   const fetchOrders = async () => {
     try {
-      const response = await API.get("/orders");
+      const token = localStorage.getItem("token");
+
+      const response = await API.get("/admin/orders", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       setOrders(response.data.orders);
     } catch (error) {
-      console.error("Failed to fetch orders:", error);
+      console.error("Failed to fetch admin orders:", error);
+
+      if (error.response?.status === 401) {
+        alert("Please login to access admin orders.");
+      }
+
+      if (error.response?.status === 403) {
+        alert("Access denied. Admin only.");
+      }
     } finally {
       setLoading(false);
     }

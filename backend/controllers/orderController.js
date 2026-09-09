@@ -5,6 +5,13 @@ const createOrder = async(req, res) => {
     try {
         const { customer, items, totalAmount } = req.body;
 
+        if (!req.user || !req.user.id) {
+            return res.status(401).json({
+                success: false,
+                message: "User authentication is required",
+            });
+        }
+
         if (!customer ||
             !customer.fullName ||
             !customer.email ||
@@ -59,8 +66,9 @@ const createOrder = async(req, res) => {
             });
         }
 
-        // Create order
+        // Create order with logged-in user's ID
         const order = await Order.create({
+            user: req.user.id,
             customer,
             items,
             totalAmount,
@@ -84,6 +92,7 @@ const createOrder = async(req, res) => {
 const getOrders = async(req, res) => {
     try {
         const orders = await Order.find()
+            .populate("user", "name email")
             .populate("items.product")
             .sort({ createdAt: -1 });
 
@@ -101,11 +110,40 @@ const getOrders = async(req, res) => {
     }
 };
 
+const getMyOrders = async(req, res) => {
+    try {
+        if (!req.user || !req.user.id) {
+            return res.status(401).json({
+                success: false,
+                message: "User authentication is required",
+            });
+        }
+
+        const orders = await Order.find({
+                user: req.user.id,
+            })
+            .populate("items.product")
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({
+            success: true,
+            orders,
+        });
+    } catch (error) {
+        console.error("Get my orders error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch your orders",
+        });
+    }
+};
+
 const getOrderById = async(req, res) => {
     try {
-        const order = await Order.findById(req.params.id).populate(
-            "items.product"
-        );
+        const order = await Order.findById(req.params.id)
+            .populate("user", "name email")
+            .populate("items.product");
 
         if (!order) {
             return res.status(404).json({
@@ -131,5 +169,6 @@ const getOrderById = async(req, res) => {
 module.exports = {
     createOrder,
     getOrders,
+    getMyOrders,
     getOrderById,
 };

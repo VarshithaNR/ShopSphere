@@ -64,7 +64,11 @@ function Checkout() {
     } catch (error) {
       console.error("Failed to place order:", error);
 
-      alert("Failed to place order. Please try again.");
+      const message =
+        error.response?.data?.message ||
+        "Failed to place order. Please try again.";
+
+      alert(message);
     } finally {
       setLoading(false);
     }
@@ -83,7 +87,6 @@ function Checkout() {
       <h2>Shipping Information</h2>
 
       <form onSubmit={handleSubmit}>
-        {/* Full Name */}
         <div style={{ marginBottom: "15px" }}>
           <label>Full Name</label>
           <br />
@@ -107,7 +110,6 @@ function Checkout() {
           />
         </div>
 
-        {/* Email */}
         <div style={{ marginBottom: "15px" }}>
           <label>Email</label>
           <br />
@@ -131,7 +133,6 @@ function Checkout() {
           />
         </div>
 
-        {/* Address */}
         <div style={{ marginBottom: "15px" }}>
           <label>Address</label>
           <br />
@@ -155,7 +156,6 @@ function Checkout() {
           />
         </div>
 
-        {/* Phone */}
         <div style={{ marginBottom: "15px" }}>
           <label>Phone Number</label>
           <br />
@@ -179,7 +179,6 @@ function Checkout() {
           />
         </div>
 
-        {/* Place Order */}
         <button
           type="submit"
           disabled={loading}

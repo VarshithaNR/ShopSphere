@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getOrders } from "../api/orderApi";
 
 function Orders() {
+  const navigate = useNavigate();
+
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -9,19 +12,29 @@ function Orders() {
     const fetchOrders = async () => {
       try {
         const data = await getOrders();
+
         setOrders(data.orders);
       } catch (error) {
         console.error("Failed to fetch orders:", error);
+
+        if (error.response?.status === 401) {
+          alert("Please login to view your orders.");
+          navigate("/login");
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchOrders();
-  }, []);
+  }, [navigate]);
 
   if (loading) {
-    return <p style={{ padding: "30px" }}>Loading orders...</p>;
+    return (
+      <p style={{ padding: "30px" }}>
+        Loading orders...
+      </p>
+    );
   }
 
   return (
@@ -50,11 +63,13 @@ function Orders() {
             <h2>Order #{order._id}</h2>
 
             <p>
-              <strong>Status:</strong> {order.status}
+              <strong>Status:</strong>{" "}
+              {order.status}
             </p>
 
             <p>
-              <strong>Total:</strong> ₹{order.totalAmount}
+              <strong>Total:</strong> ₹
+              {order.totalAmount}
             </p>
 
             <h3>Products</h3>
@@ -102,7 +117,9 @@ function Orders() {
 
             <p>
               <strong>Order Date:</strong>{" "}
-              {new Date(order.createdAt).toLocaleString()}
+              {new Date(
+                order.createdAt
+              ).toLocaleString()}
             </p>
           </div>
         ))

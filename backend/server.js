@@ -1,4 +1,5 @@
 const dns = require("dns");
+
 dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 const express = require("express");
@@ -8,6 +9,8 @@ const cors = require("cors");
 
 const productRoutes = require("./routes/productRoutes");
 const orderRoutes = require("./routes/orderRoutes");
+const authRoutes = require("./routes/authRoutes");
+const adminOrderRoutes = require("./routes/adminOrderRoutes");
 
 dotenv.config();
 
@@ -18,6 +21,8 @@ app.use(express.json());
 
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/admin/orders", adminOrderRoutes);
 
 const PORT = process.env.PORT || 5000;
 
@@ -31,7 +36,10 @@ mongoose
         });
     })
     .catch((error) => {
-        console.error("MongoDB connection failed:", error.message);
+        console.error(
+            "MongoDB connection failed:",
+            error.message
+        );
     });
 
 app.get("/", (req, res) => {
