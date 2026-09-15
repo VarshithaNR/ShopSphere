@@ -11,6 +11,7 @@ function AdminProducts() {
   const fetchProducts = async () => {
     try {
       const response = await API.get("/products");
+
       setProducts(response.data.products);
     } catch (error) {
       console.error("Failed to fetch products:", error);
@@ -33,17 +34,32 @@ function AdminProducts() {
     }
 
     try {
-      await API.delete(`/products/${productId}`);
+      const token = localStorage.getItem("token");
+
+      await API.delete(`/products/${productId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       setProducts((currentProducts) =>
         currentProducts.filter(
           (product) => product._id !== productId
         )
       );
-    } catch (error) {
-      console.error("Failed to delete product:", error);
 
-      alert("Failed to delete product.");
+      alert("Product deleted successfully!");
+    } catch (error) {
+      console.error(
+        "Failed to delete product:",
+        error
+      );
+
+      const message =
+        error.response?.data?.message ||
+        "Failed to delete product.";
+
+      alert(message);
     }
   };
 
@@ -116,7 +132,8 @@ function AdminProducts() {
               <p>{product.description}</p>
 
               <p>
-                <strong>Price:</strong> ₹{product.price}
+                <strong>Price:</strong> ₹
+                {product.price}
               </p>
 
               <p>
@@ -125,15 +142,18 @@ function AdminProducts() {
               </p>
 
               <p>
-                <strong>Brand:</strong> {product.brand}
+                <strong>Brand:</strong>{" "}
+                {product.brand}
               </p>
 
               <p>
-                <strong>Stock:</strong> {product.stock}
+                <strong>Stock:</strong>{" "}
+                {product.stock}
               </p>
 
               <p>
-                <strong>Rating:</strong> ⭐ {product.rating}
+                <strong>Rating:</strong> ⭐{" "}
+                {product.rating}
               </p>
 
               <div

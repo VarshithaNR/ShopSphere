@@ -4,6 +4,7 @@ import API from "../../api/productApi";
 function AdminOrders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
 
   const fetchOrders = async () => {
     try {
@@ -17,7 +18,10 @@ function AdminOrders() {
 
       setOrders(response.data.orders);
     } catch (error) {
-      console.error("Failed to fetch admin orders:", error);
+      console.error(
+        "Failed to fetch admin orders:",
+        error
+      );
 
       if (error.response?.status === 401) {
         alert("Please login to access admin orders.");
@@ -34,6 +38,55 @@ function AdminOrders() {
   useEffect(() => {
     fetchOrders();
   }, []);
+
+  const handleStatusChange = async (
+    orderId,
+    newStatus
+  ) => {
+    try {
+      setUpdatingOrderId(orderId);
+
+      const token = localStorage.getItem("token");
+
+      const response = await API.put(
+        `/admin/orders/${orderId}/status`,
+        {
+          status: newStatus,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      setOrders((currentOrders) =>
+        currentOrders.map((order) =>
+          order._id === orderId
+            ? {
+                ...order,
+                status: response.data.order.status,
+              }
+            : order
+        )
+      );
+
+      alert("Order status updated successfully!");
+    } catch (error) {
+      console.error(
+        "Failed to update order status:",
+        error
+      );
+
+      const message =
+        error.response?.data?.message ||
+        "Failed to update order status.";
+
+      alert(message);
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -73,9 +126,69 @@ function AdminOrders() {
               {order.status}
             </p>
 
+            <div style={{ marginBottom: "20px" }}>
+              <label>
+                <strong>Update Status:</strong>
+              </label>
+
+              <br />
+
+              <select
+                value={order.status}
+                disabled={
+                  updatingOrderId === order._id
+                }
+                onChange={(e) =>
+                  handleStatusChange(
+                    order._id,
+                    e.target.value
+                  )
+                }
+                style={{
+                  padding: "10px",
+                  marginTop: "8px",
+                  fontSize: "16px",
+                  borderRadius: "6px",
+                  border: "1px solid #ccc",
+                }}
+              >
+                <option value="Pending">
+                  Pending
+                </option>
+
+                <option value="Confirmed">
+                  Confirmed
+                </option>
+
+                <option value="Shipped">
+                  Shipped
+                </option>
+
+                <option value="Delivered">
+                  Delivered
+                </option>
+
+                <option value="Cancelled">
+                  Cancelled
+                </option>
+              </select>
+
+              {updatingOrderId === order._id && (
+                <span style={{ marginLeft: "10px" }}>
+                  Updating...
+                </span>
+              )}
+            </div>
+
             <p>
               <strong>Total Amount:</strong> ₹
               {order.totalAmount}
+            </p>
+
+            <p>
+              <strong>Payment Method:</strong>{" "}
+              {order.paymentMethod ||
+                "Not specified"}
             </p>
 
             <h3>Customer Information</h3>

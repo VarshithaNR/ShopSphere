@@ -31,6 +31,8 @@ function AddProduct() {
     try {
       setLoading(true);
 
+      const token = localStorage.getItem("token");
+
       const productData = {
         name: formData.name,
         description: formData.description,
@@ -42,7 +44,11 @@ function AddProduct() {
         rating: Number(formData.rating),
       };
 
-      await API.post("/products", productData);
+      await API.post("/products", productData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       alert("Product added successfully!");
 
@@ -50,7 +56,11 @@ function AddProduct() {
     } catch (error) {
       console.error("Failed to add product:", error);
 
-      alert("Failed to add product.");
+      const message =
+        error.response?.data?.message ||
+        "Failed to add product.";
+
+      alert(message);
     } finally {
       setLoading(false);
     }
@@ -69,7 +79,6 @@ function AddProduct() {
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: "15px" }}>
           <label>Product Name</label>
-
           <input
             type="text"
             name="name"
@@ -87,7 +96,6 @@ function AddProduct() {
 
         <div style={{ marginBottom: "15px" }}>
           <label>Description</label>
-
           <textarea
             name="description"
             placeholder="Enter product description"
@@ -105,7 +113,6 @@ function AddProduct() {
 
         <div style={{ marginBottom: "15px" }}>
           <label>Price</label>
-
           <input
             type="number"
             name="price"
@@ -124,7 +131,6 @@ function AddProduct() {
 
         <div style={{ marginBottom: "15px" }}>
           <label>Category</label>
-
           <input
             type="text"
             name="category"
@@ -142,7 +148,6 @@ function AddProduct() {
 
         <div style={{ marginBottom: "15px" }}>
           <label>Brand</label>
-
           <input
             type="text"
             name="brand"
@@ -160,7 +165,6 @@ function AddProduct() {
 
         <div style={{ marginBottom: "15px" }}>
           <label>Image URL</label>
-
           <input
             type="url"
             name="image"
@@ -178,7 +182,6 @@ function AddProduct() {
 
         <div style={{ marginBottom: "15px" }}>
           <label>Stock</label>
-
           <input
             type="number"
             name="stock"
@@ -197,7 +200,6 @@ function AddProduct() {
 
         <div style={{ marginBottom: "15px" }}>
           <label>Rating</label>
-
           <input
             type="number"
             name="rating"
@@ -222,9 +224,7 @@ function AddProduct() {
           style={{
             padding: "12px 24px",
             fontSize: "16px",
-            cursor: loading
-              ? "not-allowed"
-              : "pointer",
+            cursor: loading ? "not-allowed" : "pointer",
             borderRadius: "6px",
             border: "none",
           }}

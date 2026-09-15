@@ -11,7 +11,11 @@ function Cart() {
   }, []);
 
   const updateCart = (updatedCart) => {
-    localStorage.setItem("cart", JSON.stringify(updatedCart));
+    localStorage.setItem(
+      "cart",
+      JSON.stringify(updatedCart)
+    );
+
     setCart(updatedCart);
 
     window.dispatchEvent(new Event("cartUpdated"));
@@ -39,14 +43,24 @@ function Cart() {
   };
 
   const increaseQuantity = (productId) => {
-    const updatedCart = cart.map((item) =>
-      item._id === productId
-        ? {
-            ...item,
-            quantity: item.quantity + 1,
-          }
-        : item
-    );
+    const updatedCart = cart.map((item) => {
+      if (item._id !== productId) {
+        return item;
+      }
+
+      if (item.quantity >= item.stock) {
+        alert(
+          `Only ${item.stock} item(s) available in stock.`
+        );
+
+        return item;
+      }
+
+      return {
+        ...item,
+        quantity: item.quantity + 1,
+      };
+    });
 
     updateCart(updatedCart);
   };
@@ -58,11 +72,7 @@ function Cart() {
   );
 
   return (
-    <div
-      style={{
-        padding: "30px",
-      }}
-    >
+    <div style={{ padding: "30px" }}>
       <h1>Shopping Cart</h1>
 
       {cart.length === 0 ? (
@@ -100,6 +110,10 @@ function Cart() {
 
                 <h3>₹{product.price}</h3>
 
+                <p>
+                  Available Stock: {product.stock}
+                </p>
+
                 <div
                   style={{
                     display: "flex",
@@ -112,9 +126,13 @@ function Cart() {
                     onClick={() =>
                       decreaseQuantity(product._id)
                     }
+                    disabled={product.quantity <= 1}
                     style={{
                       padding: "5px 12px",
-                      cursor: "pointer",
+                      cursor:
+                        product.quantity <= 1
+                          ? "not-allowed"
+                          : "pointer",
                     }}
                   >
                     −
@@ -126,9 +144,15 @@ function Cart() {
                     onClick={() =>
                       increaseQuantity(product._id)
                     }
+                    disabled={
+                      product.quantity >= product.stock
+                    }
                     style={{
                       padding: "5px 12px",
-                      cursor: "pointer",
+                      cursor:
+                        product.quantity >= product.stock
+                          ? "not-allowed"
+                          : "pointer",
                     }}
                   >
                     +

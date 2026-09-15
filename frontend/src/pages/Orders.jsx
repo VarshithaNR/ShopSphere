@@ -68,9 +68,78 @@ function Orders() {
             </p>
 
             <p>
+              <strong>Payment Method:</strong>{" "}
+              {order.paymentMethod ||
+                "Not specified"}
+            </p>
+
+            <p>
               <strong>Total:</strong> ₹
               {order.totalAmount}
             </p>
+
+            <h3>Order Progress</h3>
+
+            <div
+              style={{
+                display: "flex",
+                gap: "10px",
+                flexWrap: "wrap",
+                marginBottom: "20px",
+              }}
+            >
+              {[
+                "Pending",
+                "Confirmed",
+                "Shipped",
+                "Delivered",
+              ].map((status) => {
+                const statuses = [
+                  "Pending",
+                  "Confirmed",
+                  "Shipped",
+                  "Delivered",
+                ];
+
+                const currentIndex =
+                  statuses.indexOf(order.status);
+
+                const statusIndex =
+                  statuses.indexOf(status);
+
+                const isCompleted =
+                  currentIndex >= statusIndex;
+
+                return (
+                  <div
+                    key={status}
+                    style={{
+                      padding: "10px 15px",
+                      borderRadius: "20px",
+                      border: "1px solid #ccc",
+                      opacity: isCompleted ? 1 : 0.4,
+                      fontWeight:
+                        order.status === status
+                          ? "bold"
+                          : "normal",
+                    }}
+                  >
+                    {isCompleted ? "✓ " : ""}
+                    {status}
+                  </div>
+                );
+              })}
+            </div>
+
+            {order.status === "Cancelled" && (
+              <p
+                style={{
+                  fontWeight: "bold",
+                }}
+              >
+                This order has been cancelled.
+              </p>
+            )}
 
             <h3>Products</h3>
 
@@ -89,6 +158,11 @@ function Orders() {
                 <p>
                   Price: ₹{item.price} × Quantity:{" "}
                   {item.quantity}
+                </p>
+
+                <p>
+                  Subtotal: ₹
+                  {item.price * item.quantity}
                 </p>
               </div>
             ))}

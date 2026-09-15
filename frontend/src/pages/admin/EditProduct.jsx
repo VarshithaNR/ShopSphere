@@ -39,7 +39,11 @@ function EditProduct() {
         });
       } catch (error) {
         console.error("Failed to fetch product:", error);
-        alert("Failed to load product.");
+
+        alert(
+          error.response?.data?.message ||
+            "Failed to load product."
+        );
       } finally {
         setLoading(false);
       }
@@ -61,6 +65,8 @@ function EditProduct() {
     try {
       setSaving(true);
 
+      const token = localStorage.getItem("token");
+
       const productData = {
         name: formData.name,
         description: formData.description,
@@ -72,7 +78,11 @@ function EditProduct() {
         rating: Number(formData.rating),
       };
 
-      await API.put(`/products/${id}`, productData);
+      await API.put(`/products/${id}`, productData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       alert("Product updated successfully!");
 
@@ -80,7 +90,11 @@ function EditProduct() {
     } catch (error) {
       console.error("Failed to update product:", error);
 
-      alert("Failed to update product.");
+      const message =
+        error.response?.data?.message ||
+        "Failed to update product.";
+
+      alert(message);
     } finally {
       setSaving(false);
     }
@@ -257,7 +271,9 @@ function EditProduct() {
             border: "none",
           }}
         >
-          {saving ? "Updating Product..." : "Update Product"}
+          {saving
+            ? "Updating Product..."
+            : "Update Product"}
         </button>
       </form>
     </div>

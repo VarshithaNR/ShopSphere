@@ -3,7 +3,7 @@ const express = require("express");
 const {
     createOrder,
     getMyOrders,
-    getOrderById,
+    getMyOrderById,
 } = require("../controllers/orderController");
 
 const protect = require("../middleware/authMiddleware");
@@ -14,6 +14,6 @@ router.post("/", protect, createOrder);
 
 router.get("/", protect, getMyOrders);
 
-router.get("/:id", protect, getOrderById);
+router.get("/:id", protect, getMyOrderById);
 
 module.exports = router;
