@@ -1,137 +1,105 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import API from "../api/productApi";
+import { useNavigate, useLocation, Link } from "react-router-dom";
+import { loginUser } from "../api/authApi";
+import { getErrorMessage } from "../api/client";
+import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function Login() {
-  const navigate = useNavigate();
+    const navigate = useNavigate();
+    const location = useLocation();
+    const { login } = useAuth();
+    const toast = useToast();
 
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  });
+    const [formData, setFormData] = useState({ email: "", password: "" });
+    const [errors, setErrors] = useState({});
+    const [loading, setLoading] = useState(false);
 
-  const [loading, setLoading] = useState(false);
+    const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+        setErrors((current) => ({ ...current, [e.target.name]: undefined }));
+    };
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+    const validate = () => {
+        const next = {};
+        if (!EMAIL_PATTERN.test(formData.email.trim())) next.email = "Enter a valid email address.";
+        if (!formData.password) next.password = "Password is required.";
+        setErrors(next);
+        return Object.keys(next).length === 0;
+    };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!validate()) return;
 
-    try {
-      setLoading(true);
+        setLoading(true);
+        try {
+            const data = await loginUser({
+                email: formData.email.trim(),
+                password: formData.password,
+            });
 
-      const response = await API.post("/auth/login", {
-        email: formData.email,
-        password: formData.password,
-      });
+            if (data.success) {
+                login(data.token, data.user);
+                toast.success(`Welcome back, ${data.user.name.split(" ")[0]}!`);
 
-      if (response.data.success) {
-        localStorage.setItem(
-          "token",
-          response.data.token
-        );
-
-        localStorage.setItem(
-          "user",
-          JSON.stringify(response.data.user)
-        );
-
-        alert("Login successful!");
-
-        if (response.data.user.role === "admin") {
-          navigate("/admin/products");
-        } else {
-          navigate("/");
+                const redirectTo = location.state?.from || (data.user.role === "admin" ? "/admin/dashboard" : "/");
+                navigate(redirectTo, { replace: true });
+            }
+        } catch (error) {
+            toast.error(getErrorMessage(error, "Login failed. Please check your email and password."));
+        } finally {
+            setLoading(false);
         }
-      }
-    } catch (error) {
-      console.error("Login error:", error);
+    };
 
-      const message =
-        error.response?.data?.message ||
-        "Login failed. Please check your email and password.";
+    return (
+        <div className="page page--narrow">
+            <h1>Login</h1>
 
-      alert(message);
-    } finally {
-      setLoading(false);
-    }
-  };
+            <form className="form-card" onSubmit={handleSubmit} noValidate>
+                <div className="field">
+                    <label htmlFor="email">Email</label>
+                    <input
+                        id="email"
+                        type="email"
+                        name="email"
+                        autoComplete="email"
+                        className={`input${errors.email ? " has-error" : ""}`}
+                        placeholder="Enter your email"
+                        value={formData.email}
+                        onChange={handleChange}
+                    />
+                    {errors.email && <p className="field-error">{errors.email}</p>}
+                </div>
 
-  return (
-    <div
-      style={{
-        padding: "30px",
-        maxWidth: "500px",
-        margin: "0 auto",
-      }}
-    >
-      <h1>Login</h1>
+                <div className="field" style={{ marginBottom: 0 }}>
+                    <label htmlFor="password">Password</label>
+                    <input
+                        id="password"
+                        type="password"
+                        name="password"
+                        autoComplete="current-password"
+                        className={`input${errors.password ? " has-error" : ""}`}
+                        placeholder="Enter your password"
+                        value={formData.password}
+                        onChange={handleChange}
+                    />
+                    {errors.password && <p className="field-error">{errors.password}</p>}
+                </div>
 
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: "15px" }}>
-          <label>Email</label>
-          <br />
+                <button type="submit" className="btn btn--primary btn--block" disabled={loading} style={{ marginTop: 20 }}>
+                    {loading ? "Logging in..." : "Login"}
+                </button>
+            </form>
 
-          <input
-            type="email"
-            name="email"
-            placeholder="Enter your email"
-            value={formData.email}
-            onChange={handleChange}
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
+            <p className="text-muted text-sm" style={{ marginTop: 16 }}>
+                Don't have an account? <Link to="/register">Register</Link>
+            </p>
         </div>
-
-        <div style={{ marginBottom: "15px" }}>
-          <label>Password</label>
-          <br />
-
-          <input
-            type="password"
-            name="password"
-            placeholder="Enter your password"
-            value={formData.password}
-            onChange={handleChange}
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            padding: "12px 24px",
-            fontSize: "16px",
-            cursor: loading ? "not-allowed" : "pointer",
-            borderRadius: "6px",
-            border: "none",
-          }}
-        >
-          {loading ? "Logging in..." : "Login"}
-        </button>
-      </form>
-
-      <p style={{ marginTop: "20px" }}>
-        Don't have an account?{" "}
-        <Link to="/register">Register</Link>
-      </p>
-    </div>
-  );
+    );
 }
 
 export default Login;

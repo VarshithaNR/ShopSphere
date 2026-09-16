@@ -1,204 +1,142 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import API from "../../api/productApi";
+import { Link } from "react-router-dom";
+import { getProducts, deleteProduct } from "../../api/productApi";
+import { getErrorMessage } from "../../api/client";
+import { useToast } from "../../context/ToastContext";
+import Spinner from "../../components/Spinner";
+import StateMessage from "../../components/StateMessage";
 
 function AdminProducts() {
-  const navigate = useNavigate();
+    const toast = useToast();
+    const [products, setProducts] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+    const [search, setSearch] = useState("");
+    const [deletingId, setDeletingId] = useState(null);
 
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
+    const fetchProducts = async () => {
+        setLoading(true);
+        setError("");
+        try {
+            const data = await getProducts({ search: search || undefined });
+            setProducts(data.products);
+        } catch (err) {
+            setError(getErrorMessage(err, "Failed to load products."));
+        } finally {
+            setLoading(false);
+        }
+    };
 
-  const fetchProducts = async () => {
-    try {
-      const response = await API.get("/products");
+    useEffect(() => {
+        const timer = setTimeout(fetchProducts, search ? 350 : 0);
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search]);
 
-      setProducts(response.data.products);
-    } catch (error) {
-      console.error("Failed to fetch products:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const handleDelete = async (productId, productName) => {
+        if (!window.confirm(`Delete "${productName}"? This can't be undone.`)) return;
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
+        setDeletingId(productId);
+        try {
+            await deleteProduct(productId);
+            setProducts((current) => current.filter((product) => product._id !== productId));
+            toast.success("Product deleted successfully.");
+        } catch (err) {
+            toast.error(getErrorMessage(err, "Failed to delete product."));
+        } finally {
+            setDeletingId(null);
+        }
+    };
 
-  const handleDelete = async (productId) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this product?"
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem("token");
-
-      await API.delete(`/products/${productId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      setProducts((currentProducts) =>
-        currentProducts.filter(
-          (product) => product._id !== productId
-        )
-      );
-
-      alert("Product deleted successfully!");
-    } catch (error) {
-      console.error(
-        "Failed to delete product:",
-        error
-      );
-
-      const message =
-        error.response?.data?.message ||
-        "Failed to delete product.";
-
-      alert(message);
-    }
-  };
-
-  if (loading) {
     return (
-      <p style={{ padding: "30px" }}>
-        Loading products...
-      </p>
-    );
-  }
-
-  return (
-    <div
-      style={{
-        padding: "30px",
-        maxWidth: "1200px",
-        margin: "0 auto",
-      }}
-    >
-      <h1>Admin - Product Management</h1>
-
-      <button
-        onClick={() => navigate("/admin/products/add")}
-        style={{
-          padding: "12px 20px",
-          marginTop: "15px",
-          cursor: "pointer",
-          borderRadius: "6px",
-          border: "none",
-          fontSize: "16px",
-        }}
-      >
-        + Add Product
-      </button>
-
-      {products.length === 0 ? (
-        <p>No products available.</p>
-      ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fill, minmax(280px, 1fr))",
-            gap: "20px",
-            marginTop: "30px",
-          }}
-        >
-          {products.map((product) => (
-            <div
-              key={product._id}
-              style={{
-                border: "1px solid #ddd",
-                borderRadius: "10px",
-                padding: "16px",
-              }}
-            >
-              <img
-                src={product.image}
-                alt={product.name}
-                style={{
-                  width: "100%",
-                  height: "200px",
-                  objectFit: "cover",
-                  borderRadius: "8px",
-                }}
-              />
-
-              <h2>{product.name}</h2>
-
-              <p>{product.description}</p>
-
-              <p>
-                <strong>Price:</strong> ₹
-                {product.price}
-              </p>
-
-              <p>
-                <strong>Category:</strong>{" "}
-                {product.category}
-              </p>
-
-              <p>
-                <strong>Brand:</strong>{" "}
-                {product.brand}
-              </p>
-
-              <p>
-                <strong>Stock:</strong>{" "}
-                {product.stock}
-              </p>
-
-              <p>
-                <strong>Rating:</strong> ⭐{" "}
-                {product.rating}
-              </p>
-
-              <div
-                style={{
-                  display: "flex",
-                  gap: "10px",
-                  marginTop: "15px",
-                }}
-              >
-                <button
-                  onClick={() =>
-                    navigate(
-                      `/admin/products/edit/${product._id}`
-                    )
-                  }
-                  style={{
-                    padding: "10px 16px",
-                    cursor: "pointer",
-                    borderRadius: "6px",
-                    border: "none",
-                  }}
-                >
-                  Edit
-                </button>
-
-                <button
-                  onClick={() =>
-                    handleDelete(product._id)
-                  }
-                  style={{
-                    padding: "10px 16px",
-                    cursor: "pointer",
-                    borderRadius: "6px",
-                    border: "none",
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
+        <div>
+            <div className="row row--between" style={{ marginBottom: 20 }}>
+                <h1 style={{ marginBottom: 0 }}>Products</h1>
+                <Link to="/admin/products/add" className="btn btn--primary">+ Add Product</Link>
             </div>
-          ))}
+
+            <div className="filter-bar">
+                <input
+                    type="search"
+                    className="input filter-bar__search"
+                    placeholder="Search products by name..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    aria-label="Search products"
+                />
+            </div>
+
+            {loading && <Spinner fullPage label="Loading products..." />}
+
+            {!loading && error && <StateMessage icon="⚠️" title="Couldn't load products" message={error} />}
+
+            {!loading && !error && products.length === 0 && (
+                <StateMessage icon="📦" title="No products found" message="Try a different search, or add your first product." />
+            )}
+
+            {!loading && !error && products.length > 0 && (
+                <div className="card table-wrap">
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Category</th>
+                                <th>Price</th>
+                                <th>Stock</th>
+                                <th>Rating</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {products.map((product) => (
+                                <tr key={product._id}>
+                                    <td>
+                                        <div className="row" style={{ gap: 10 }}>
+                                            <img
+                                                src={product.image}
+                                                alt={product.name}
+                                                style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6, flexShrink: 0 }}
+                                            />
+                                            <div>
+                                                <div style={{ fontWeight: 600 }}>{product.name}</div>
+                                                <div className="text-muted text-sm">{product.brand}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>{product.category}</td>
+                                    <td>₹{product.price.toLocaleString("en-IN")}</td>
+                                    <td>
+                                        {product.stock === 0 ? (
+                                            <span className="badge badge--danger">Out of stock</span>
+                                        ) : product.stock <= 5 ? (
+                                            <span className="badge badge--warning">{product.stock} left</span>
+                                        ) : (
+                                            product.stock
+                                        )}
+                                    </td>
+                                    <td>{product.rating > 0 ? `⭐ ${product.rating.toFixed(1)}` : "—"}</td>
+                                    <td>
+                                        <div className="row" style={{ gap: 8 }}>
+                                            <Link to={`/admin/products/edit/${product._id}`} className="btn btn--outline btn--sm">
+                                                Edit
+                                            </Link>
+                                            <button
+                                                className="btn btn--danger btn--sm"
+                                                onClick={() => handleDelete(product._id, product.name)}
+                                                disabled={deletingId === product._id}
+                                            >
+                                                {deletingId === product._id ? "Deleting..." : "Delete"}
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
         </div>
-      )}
-    </div>
-  );
+    );
 }
 
 export default AdminProducts;

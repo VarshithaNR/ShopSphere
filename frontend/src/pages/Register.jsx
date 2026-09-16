@@ -1,145 +1,124 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import API from "../api/productApi";
+import { registerUser } from "../api/authApi";
+import { getErrorMessage } from "../api/client";
+import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function Register() {
-  const navigate = useNavigate();
+    const navigate = useNavigate();
+    const { login } = useAuth();
+    const toast = useToast();
 
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-  });
+    const [formData, setFormData] = useState({ name: "", email: "", password: "" });
+    const [errors, setErrors] = useState({});
+    const [loading, setLoading] = useState(false);
 
-  const [loading, setLoading] = useState(false);
+    const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+        setErrors((current) => ({ ...current, [e.target.name]: undefined }));
+    };
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+    const validate = () => {
+        const next = {};
+        if (!formData.name.trim()) next.name = "Name is required.";
+        if (!EMAIL_PATTERN.test(formData.email.trim())) next.email = "Enter a valid email address.";
+        if (formData.password.length < 6) next.password = "Password must be at least 6 characters.";
+        setErrors(next);
+        return Object.keys(next).length === 0;
+    };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!validate()) return;
 
-    try {
-      setLoading(true);
+        setLoading(true);
+        try {
+            const data = await registerUser({
+                name: formData.name.trim(),
+                email: formData.email.trim(),
+                password: formData.password,
+            });
 
-      const response = await API.post("/auth/register", {
-        name: formData.name,
-        email: formData.email,
-        password: formData.password,
-      });
+            if (data.success) {
+                // Register already returns a token, so log the user straight in
+                // instead of making them log in again right after signing up.
+                login(data.token, data.user);
+                toast.success("Account created! Welcome to ShopSphere.");
+                navigate("/", { replace: true });
+            }
+        } catch (error) {
+            toast.error(getErrorMessage(error, "Registration failed. Please try again."));
+        } finally {
+            setLoading(false);
+        }
+    };
 
-      if (response.data.success) {
-        alert("Registration successful!");
+    return (
+        <div className="page page--narrow">
+            <h1>Create Account</h1>
 
-        navigate("/login");
-      }
-    } catch (error) {
-      console.error("Registration error:", error);
+            <form className="form-card" onSubmit={handleSubmit} noValidate>
+                <div className="field">
+                    <label htmlFor="name">Name</label>
+                    <input
+                        id="name"
+                        type="text"
+                        name="name"
+                        autoComplete="name"
+                        className={`input${errors.name ? " has-error" : ""}`}
+                        placeholder="Enter your name"
+                        value={formData.name}
+                        onChange={handleChange}
+                    />
+                    {errors.name && <p className="field-error">{errors.name}</p>}
+                </div>
 
-      const message =
-        error.response?.data?.message ||
-        "Registration failed. Please try again.";
+                <div className="field">
+                    <label htmlFor="email">Email</label>
+                    <input
+                        id="email"
+                        type="email"
+                        name="email"
+                        autoComplete="email"
+                        className={`input${errors.email ? " has-error" : ""}`}
+                        placeholder="Enter your email"
+                        value={formData.email}
+                        onChange={handleChange}
+                    />
+                    {errors.email && <p className="field-error">{errors.email}</p>}
+                </div>
 
-      alert(message);
-    } finally {
-      setLoading(false);
-    }
-  };
+                <div className="field" style={{ marginBottom: 0 }}>
+                    <label htmlFor="password">Password</label>
+                    <input
+                        id="password"
+                        type="password"
+                        name="password"
+                        autoComplete="new-password"
+                        className={`input${errors.password ? " has-error" : ""}`}
+                        placeholder="At least 6 characters"
+                        value={formData.password}
+                        onChange={handleChange}
+                    />
+                    {errors.password ?
+                        <p className="field-error">{errors.password}</p> :
+                        <p className="field-hint">Must be at least 6 characters.</p>
+                    }
+                </div>
 
-  return (
-    <div
-      style={{
-        padding: "30px",
-        maxWidth: "500px",
-        margin: "0 auto",
-      }}
-    >
-      <h1>Create Account</h1>
+                <button type="submit" className="btn btn--primary btn--block" disabled={loading} style={{ marginTop: 20 }}>
+                    {loading ? "Creating Account..." : "Register"}
+                </button>
+            </form>
 
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: "15px" }}>
-          <label>Name</label>
-          <br />
-
-          <input
-            type="text"
-            name="name"
-            placeholder="Enter your name"
-            value={formData.name}
-            onChange={handleChange}
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
+            <p className="text-muted text-sm" style={{ marginTop: 16 }}>
+                Already have an account? <Link to="/login">Login</Link>
+            </p>
         </div>
-
-        <div style={{ marginBottom: "15px" }}>
-          <label>Email</label>
-          <br />
-
-          <input
-            type="email"
-            name="email"
-            placeholder="Enter your email"
-            value={formData.email}
-            onChange={handleChange}
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "15px" }}>
-          <label>Password</label>
-          <br />
-
-          <input
-            type="password"
-            name="password"
-            placeholder="Enter password"
-            value={formData.password}
-            onChange={handleChange}
-            minLength="6"
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            padding: "12px 24px",
-            fontSize: "16px",
-            cursor: loading ? "not-allowed" : "pointer",
-            borderRadius: "6px",
-            border: "none",
-          }}
-        >
-          {loading ? "Creating Account..." : "Register"}
-        </button>
-      </form>
-
-      <p style={{ marginTop: "20px" }}>
-        Already have an account?{" "}
-        <Link to="/login">Login</Link>
-      </p>
-    </div>
-  );
+    );
 }
 
 export default Register;

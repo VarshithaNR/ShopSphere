@@ -1,29 +1,18 @@
 import { Navigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 function ProtectedRoute({ children, adminOnly = false }) {
-  const token = localStorage.getItem("token");
-  const savedUser = localStorage.getItem("user");
+    const { isAuthenticated, isAdmin } = useAuth();
 
-  if (!token || !savedUser) {
-    return <Navigate to="/login" replace />;
-  }
+    if (!isAuthenticated) {
+        return <Navigate to="/login" replace />;
+    }
 
-  let user;
+    if (adminOnly && !isAdmin) {
+        return <Navigate to="/" replace />;
+    }
 
-  try {
-    user = JSON.parse(savedUser);
-  } catch (error) {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-
-    return <Navigate to="/login" replace />;
-  }
-
-  if (adminOnly && user.role !== "admin") {
-    return <Navigate to="/" replace />;
-  }
-
-  return children;
+    return children;
 }
 
 export default ProtectedRoute;

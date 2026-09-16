@@ -1,358 +1,207 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createOrder } from "../api/orderApi";
+import { getErrorMessage } from "../api/client";
+import { useCart } from "../context/CartContext";
+import { useToast } from "../context/ToastContext";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_PATTERN = /^[0-9+\-\s()]{7,20}$/;
+
+const PAYMENT_METHODS = [
+    { value: "Cash on Delivery", label: "Cash on Delivery", note: null },
+    { value: "UPI", label: "UPI", note: "Demo checkout — no live payment gateway is connected." },
+    { value: "Card", label: "Card", note: "Demo checkout — no live payment gateway is connected." },
+];
 
 function Checkout() {
-  const navigate = useNavigate();
+    const navigate = useNavigate();
+    const { cart, subtotal, clearCart } = useCart();
+    const toast = useToast();
 
-  const [cart, setCart] = useState([]);
+    const [formData, setFormData] = useState({ fullName: "", email: "", address: "", phone: "" });
+    const [errors, setErrors] = useState({});
+    const [paymentMethod, setPaymentMethod] = useState("Cash on Delivery");
+    const [submitting, setSubmitting] = useState(false);
+    const submittedRef = useRef(false);
 
-  const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    address: "",
-    phone: "",
-  });
+    useEffect(() => {
+        if (cart.length === 0) navigate("/cart", { replace: true });
+    }, [cart, navigate]);
 
-  const [paymentMethod, setPaymentMethod] =
-    useState("Cash on Delivery");
+    const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+        setErrors((current) => ({ ...current, [e.target.name]: undefined }));
+    };
 
-  const [loading, setLoading] = useState(false);
+    const validate = () => {
+        const next = {};
+        if (!formData.fullName.trim()) next.fullName = "Full name is required.";
+        if (!EMAIL_PATTERN.test(formData.email.trim())) next.email = "Enter a valid email address.";
+        if (!PHONE_PATTERN.test(formData.phone.trim())) next.phone = "Enter a valid phone number.";
+        if (!formData.address.trim()) next.address = "Address is required.";
+        setErrors(next);
+        return Object.keys(next).length === 0;
+    };
 
-  useEffect(() => {
-    const savedCart =
-      JSON.parse(localStorage.getItem("cart")) || [];
+    const handleSubmit = async (e) => {
+        e.preventDefault();
 
-    if (savedCart.length === 0) {
-      navigate("/cart");
-      return;
-    }
+        // Belt-and-suspenders against double-submit: a ref (synchronous,
+        // survives re-renders within the same click) plus the disabled state.
+        if (submittedRef.current || submitting) return;
+        if (!validate()) return;
 
-    setCart(savedCart);
-  }, [navigate]);
+        submittedRef.current = true;
+        setSubmitting(true);
 
-  const totalAmount = cart.reduce(
-    (total, product) =>
-      total + product.price * product.quantity,
-    0
-  );
+        try {
+            const orderData = {
+                customer: {
+                    fullName: formData.fullName.trim(),
+                    email: formData.email.trim(),
+                    phone: formData.phone.trim(),
+                    address: formData.address.trim(),
+                },
+                // Only product + quantity are sent — price and totalAmount are
+                // always calculated server-side from the current DB prices.
+                items: cart.map((item) => ({ product: item._id, quantity: item.quantity })),
+                paymentMethod,
+            };
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+            const data = await createOrder(orderData);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+            if (data.success) {
+                clearCart();
+                navigate("/order-success", { state: { orderId: data.order._id } });
+            }
+        } catch (error) {
+            toast.error(getErrorMessage(error, "Failed to place order. Please try again."));
+            submittedRef.current = false;
+        } finally {
+            setSubmitting(false);
+        }
+    };
 
-    try {
-      setLoading(true);
+    if (cart.length === 0) return null;
 
-      const currentCart =
-        JSON.parse(localStorage.getItem("cart")) || [];
+    return (
+        <div className="page page--medium">
+            <h1>Checkout</h1>
 
-      if (currentCart.length === 0) {
-        alert("Your cart is empty.");
-        navigate("/cart");
-        return;
-      }
-
-      const items = currentCart.map((product) => ({
-        product: product._id,
-        name: product.name,
-        price: product.price,
-        quantity: product.quantity,
-      }));
-
-      const currentTotal = currentCart.reduce(
-        (total, product) =>
-          total + product.price * product.quantity,
-        0
-      );
-
-      const orderData = {
-        customer: {
-          fullName: formData.fullName,
-          email: formData.email,
-          phone: formData.phone,
-          address: formData.address,
-        },
-        items,
-        totalAmount: currentTotal,
-        paymentMethod,
-      };
-
-      const data = await createOrder(orderData);
-
-      if (data.success) {
-        localStorage.removeItem("cart");
-
-        window.dispatchEvent(
-          new Event("cartUpdated")
-        );
-
-        navigate("/order-success");
-      }
-    } catch (error) {
-      console.error(
-        "Failed to place order:",
-        error
-      );
-
-      const message =
-        error.response?.data?.message ||
-        "Failed to place order. Please try again.";
-
-      alert(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div
-      style={{
-        padding: "30px",
-        maxWidth: "900px",
-        margin: "0 auto",
-      }}
-    >
-      <h1>Checkout</h1>
-
-      <h2>Order Summary</h2>
-
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: "10px",
-          padding: "20px",
-          marginBottom: "30px",
-        }}
-      >
-        {cart.map((product) => (
-          <div
-            key={product._id}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: "20px",
-              padding: "15px 0",
-              borderBottom: "1px solid #eee",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "15px",
-              }}
-            >
-              <img
-                src={product.image}
-                alt={product.name}
-                style={{
-                  width: "80px",
-                  height: "80px",
-                  objectFit: "cover",
-                  borderRadius: "8px",
-                }}
-              />
-
-              <div>
-                <h3
-                  style={{
-                    margin: "0 0 5px",
-                  }}
-                >
-                  {product.name}
-                </h3>
-
-                <p style={{ margin: "0" }}>
-                  ₹{product.price} ×{" "}
-                  {product.quantity}
-                </p>
-              </div>
+            <h2>Order Summary</h2>
+            <div className="card card--padded" style={{ marginBottom: 24 }}>
+                {cart.map((item) => (
+                    <div key={item._id} className="line-item">
+                        <img src={item.image} alt={item.name} className="line-item__image" style={{ width: 64, height: 64 }} />
+                        <div className="line-item__details">
+                            <div className="row row--between">
+                                <div>
+                                    <div className="line-item__name">{item.name}</div>
+                                    <span className="text-muted text-sm">
+                                        ₹{item.price.toLocaleString("en-IN")} × {item.quantity}
+                                    </span>
+                                </div>
+                                <strong>₹{(item.price * item.quantity).toLocaleString("en-IN")}</strong>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                <div className="summary-row summary-row--total">
+                    <span>Total</span>
+                    <span>₹{subtotal.toLocaleString("en-IN")}</span>
+                </div>
             </div>
 
-            <strong>
-              ₹
-              {product.price *
-                product.quantity}
-            </strong>
-          </div>
-        ))}
+            <form onSubmit={handleSubmit} noValidate>
+                <h2>Shipping Information</h2>
+                <div className="card card--padded" style={{ marginBottom: 24 }}>
+                    <div className="field">
+                        <label htmlFor="fullName">Full Name</label>
+                        <input
+                            id="fullName"
+                            type="text"
+                            name="fullName"
+                            className={`input${errors.fullName ? " has-error" : ""}`}
+                            placeholder="Enter your full name"
+                            value={formData.fullName}
+                            onChange={handleChange}
+                        />
+                        {errors.fullName && <p className="field-error">{errors.fullName}</p>}
+                    </div>
 
-        <h2
-          style={{
-            textAlign: "right",
-            marginTop: "20px",
-          }}
-        >
-          Total: ₹{totalAmount}
-        </h2>
-      </div>
+                    <div className="field">
+                        <label htmlFor="email">Email</label>
+                        <input
+                            id="email"
+                            type="email"
+                            name="email"
+                            className={`input${errors.email ? " has-error" : ""}`}
+                            placeholder="Enter your email"
+                            value={formData.email}
+                            onChange={handleChange}
+                        />
+                        {errors.email && <p className="field-error">{errors.email}</p>}
+                    </div>
 
-      <h2>Shipping Information</h2>
+                    <div className="field">
+                        <label htmlFor="phone">Phone Number</label>
+                        <input
+                            id="phone"
+                            type="tel"
+                            name="phone"
+                            className={`input${errors.phone ? " has-error" : ""}`}
+                            placeholder="Enter your phone number"
+                            value={formData.phone}
+                            onChange={handleChange}
+                        />
+                        {errors.phone && <p className="field-error">{errors.phone}</p>}
+                    </div>
 
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: "15px" }}>
-          <label>Full Name</label>
-          <br />
+                    <div className="field" style={{ marginBottom: 0 }}>
+                        <label htmlFor="address">Address</label>
+                        <textarea
+                            id="address"
+                            name="address"
+                            className={`textarea${errors.address ? " has-error" : ""}`}
+                            placeholder="Enter your full shipping address"
+                            rows="3"
+                            value={formData.address}
+                            onChange={handleChange}
+                        />
+                        {errors.address && <p className="field-error">{errors.address}</p>}
+                    </div>
+                </div>
 
-          <input
-            type="text"
-            name="fullName"
-            placeholder="Enter your full name"
-            value={formData.fullName}
-            onChange={handleChange}
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
+                <h2>Payment Method</h2>
+                <div className="card card--padded" style={{ marginBottom: 24 }}>
+                    {PAYMENT_METHODS.map((method) => (
+                        <label key={method.value} className="radio-option">
+                            <input
+                                type="radio"
+                                name="paymentMethod"
+                                value={method.value}
+                                checked={paymentMethod === method.value}
+                                onChange={(e) => setPaymentMethod(e.target.value)}
+                            />
+                            <span>
+                                {method.label}
+                                {method.note && (
+                                    <span className="text-faint text-sm" style={{ display: "block" }}>
+                                        {method.note}
+                                    </span>
+                                )}
+                            </span>
+                        </label>
+                    ))}
+                </div>
+
+                <button type="submit" className="btn btn--accent btn--block" disabled={submitting}>
+                    {submitting ? "Placing Order..." : `Place Order — ₹${subtotal.toLocaleString("en-IN")}`}
+                </button>
+            </form>
         </div>
-
-        <div style={{ marginBottom: "15px" }}>
-          <label>Email</label>
-          <br />
-
-          <input
-            type="email"
-            name="email"
-            placeholder="Enter your email"
-            value={formData.email}
-            onChange={handleChange}
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "15px" }}>
-          <label>Address</label>
-          <br />
-
-          <textarea
-            name="address"
-            placeholder="Enter your address"
-            rows="4"
-            value={formData.address}
-            onChange={handleChange}
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "15px" }}>
-          <label>Phone Number</label>
-          <br />
-
-          <input
-            type="tel"
-            name="phone"
-            placeholder="Enter your phone number"
-            value={formData.phone}
-            onChange={handleChange}
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "25px" }}>
-          <h2>Payment Method</h2>
-
-          <label
-            style={{
-              display: "block",
-              marginBottom: "10px",
-            }}
-          >
-            <input
-              type="radio"
-              name="paymentMethod"
-              value="Cash on Delivery"
-              checked={
-                paymentMethod === "Cash on Delivery"
-              }
-              onChange={(e) =>
-                setPaymentMethod(e.target.value)
-              }
-            />{" "}
-            Cash on Delivery
-          </label>
-
-          <label
-            style={{
-              display: "block",
-              marginBottom: "10px",
-            }}
-          >
-            <input
-              type="radio"
-              name="paymentMethod"
-              value="UPI"
-              checked={paymentMethod === "UPI"}
-              onChange={(e) =>
-                setPaymentMethod(e.target.value)
-              }
-            />{" "}
-            UPI
-          </label>
-
-          <label
-            style={{
-              display: "block",
-            }}
-          >
-            <input
-              type="radio"
-              name="paymentMethod"
-              value="Card"
-              checked={paymentMethod === "Card"}
-              onChange={(e) =>
-                setPaymentMethod(e.target.value)
-              }
-            />{" "}
-            Card
-          </label>
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            padding: "12px 24px",
-            fontSize: "16px",
-            cursor: loading
-              ? "not-allowed"
-              : "pointer",
-            borderRadius: "6px",
-            border: "none",
-          }}
-        >
-          {loading
-            ? "Placing Order..."
-            : `Place Order - ₹${totalAmount}`}
-        </button>
-      </form>
-    </div>
-  );
+    );
 }
 
 export default Checkout;

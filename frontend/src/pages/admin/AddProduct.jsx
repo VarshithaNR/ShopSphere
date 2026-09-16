@@ -1,239 +1,135 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import API from "../../api/productApi";
+import { useNavigate, Link } from "react-router-dom";
+import { createProduct } from "../../api/productApi";
+import { getErrorMessage } from "../../api/client";
+import { useToast } from "../../context/ToastContext";
+
+const EMPTY_FORM = { name: "", description: "", price: "", category: "", brand: "", image: "", stock: "" };
 
 function AddProduct() {
-  const navigate = useNavigate();
+    const navigate = useNavigate();
+    const toast = useToast();
 
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    price: "",
-    category: "",
-    brand: "",
-    image: "",
-    stock: "",
-    rating: "",
-  });
+    const [formData, setFormData] = useState(EMPTY_FORM);
+    const [errors, setErrors] = useState({});
+    const [loading, setLoading] = useState(false);
 
-  const [loading, setLoading] = useState(false);
+    const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+        setErrors((current) => ({ ...current, [e.target.name]: undefined }));
+    };
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+    const validate = () => {
+        const next = {};
+        if (!formData.name.trim()) next.name = "Product name is required.";
+        if (!formData.description.trim()) next.description = "Description is required.";
+        if (formData.price === "" || Number(formData.price) < 0) next.price = "Enter a valid price.";
+        if (!formData.category.trim()) next.category = "Category is required.";
+        if (!formData.brand.trim()) next.brand = "Brand is required.";
+        if (!formData.image.trim()) next.image = "Image URL is required.";
+        if (formData.stock === "" || !Number.isInteger(Number(formData.stock)) || Number(formData.stock) < 0) {
+            next.stock = "Enter a valid whole-number stock quantity.";
+        }
+        setErrors(next);
+        return Object.keys(next).length === 0;
+    };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!validate()) return;
 
-    try {
-      setLoading(true);
+        setLoading(true);
+        try {
+            await createProduct({
+                name: formData.name.trim(),
+                description: formData.description.trim(),
+                price: Number(formData.price),
+                category: formData.category.trim(),
+                brand: formData.brand.trim(),
+                image: formData.image.trim(),
+                stock: Number(formData.stock),
+            });
 
-      const token = localStorage.getItem("token");
+            toast.success("Product added successfully!");
+            navigate("/admin/products");
+        } catch (err) {
+            toast.error(getErrorMessage(err, "Failed to add product."));
+        } finally {
+            setLoading(false);
+        }
+    };
 
-      const productData = {
-        name: formData.name,
-        description: formData.description,
-        price: Number(formData.price),
-        category: formData.category,
-        brand: formData.brand,
-        image: formData.image,
-        stock: Number(formData.stock),
-        rating: Number(formData.rating),
-      };
+    return (
+        <div>
+            <Link to="/admin/products" className="text-sm">← Back to Products</Link>
+            <h1>Add Product</h1>
 
-      await API.post("/products", productData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+            <form className="form-card" onSubmit={handleSubmit} noValidate style={{ maxWidth: 640 }}>
+                <div className="field">
+                    <label htmlFor="name">Product Name</label>
+                    <input id="name" name="name" className={`input${errors.name ? " has-error" : ""}`}
+                        placeholder="Enter product name" value={formData.name} onChange={handleChange} />
+                    {errors.name && <p className="field-error">{errors.name}</p>}
+                </div>
 
-      alert("Product added successfully!");
+                <div className="field">
+                    <label htmlFor="description">Description</label>
+                    <textarea id="description" name="description" rows="4"
+                        className={`textarea${errors.description ? " has-error" : ""}`}
+                        placeholder="Enter product description" value={formData.description} onChange={handleChange} />
+                    {errors.description && <p className="field-error">{errors.description}</p>}
+                </div>
 
-      navigate("/admin/products");
-    } catch (error) {
-      console.error("Failed to add product:", error);
+                <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                    <div className="field">
+                        <label htmlFor="price">Price (₹)</label>
+                        <input id="price" type="number" name="price" min="0" step="0.01"
+                            className={`input${errors.price ? " has-error" : ""}`}
+                            placeholder="0.00" value={formData.price} onChange={handleChange} />
+                        {errors.price && <p className="field-error">{errors.price}</p>}
+                    </div>
 
-      const message =
-        error.response?.data?.message ||
-        "Failed to add product.";
+                    <div className="field">
+                        <label htmlFor="stock">Stock</label>
+                        <input id="stock" type="number" name="stock" min="0" step="1"
+                            className={`input${errors.stock ? " has-error" : ""}`}
+                            placeholder="0" value={formData.stock} onChange={handleChange} />
+                        {errors.stock && <p className="field-error">{errors.stock}</p>}
+                    </div>
+                </div>
 
-      alert(message);
-    } finally {
-      setLoading(false);
-    }
-  };
+                <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                    <div className="field">
+                        <label htmlFor="category">Category</label>
+                        <input id="category" name="category" className={`input${errors.category ? " has-error" : ""}`}
+                            placeholder="e.g. Electronics" value={formData.category} onChange={handleChange} />
+                        {errors.category && <p className="field-error">{errors.category}</p>}
+                    </div>
 
-  return (
-    <div
-      style={{
-        padding: "30px",
-        maxWidth: "700px",
-        margin: "0 auto",
-      }}
-    >
-      <h1>Add Product</h1>
+                    <div className="field">
+                        <label htmlFor="brand">Brand</label>
+                        <input id="brand" name="brand" className={`input${errors.brand ? " has-error" : ""}`}
+                            placeholder="e.g. Acme" value={formData.brand} onChange={handleChange} />
+                        {errors.brand && <p className="field-error">{errors.brand}</p>}
+                    </div>
+                </div>
 
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: "15px" }}>
-          <label>Product Name</label>
-          <input
-            type="text"
-            name="name"
-            placeholder="Enter product name"
-            value={formData.name}
-            onChange={handleChange}
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
+                <div className="field" style={{ marginBottom: 0 }}>
+                    <label htmlFor="image">Image URL</label>
+                    <input id="image" type="url" name="image" className={`input${errors.image ? " has-error" : ""}`}
+                        placeholder="https://..." value={formData.image} onChange={handleChange} />
+                    {errors.image && <p className="field-error">{errors.image}</p>}
+                    {formData.image && !errors.image && (
+                        <img src={formData.image} alt="Preview" style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 8, marginTop: 8 }} />
+                    )}
+                </div>
+
+                <button type="submit" className="btn btn--primary" disabled={loading} style={{ marginTop: 20 }}>
+                    {loading ? "Adding Product..." : "Add Product"}
+                </button>
+            </form>
         </div>
-
-        <div style={{ marginBottom: "15px" }}>
-          <label>Description</label>
-          <textarea
-            name="description"
-            placeholder="Enter product description"
-            value={formData.description}
-            onChange={handleChange}
-            required
-            rows="4"
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "15px" }}>
-          <label>Price</label>
-          <input
-            type="number"
-            name="price"
-            placeholder="Enter price"
-            value={formData.price}
-            onChange={handleChange}
-            min="0"
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "15px" }}>
-          <label>Category</label>
-          <input
-            type="text"
-            name="category"
-            placeholder="Enter category"
-            value={formData.category}
-            onChange={handleChange}
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "15px" }}>
-          <label>Brand</label>
-          <input
-            type="text"
-            name="brand"
-            placeholder="Enter brand"
-            value={formData.brand}
-            onChange={handleChange}
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "15px" }}>
-          <label>Image URL</label>
-          <input
-            type="url"
-            name="image"
-            placeholder="Enter image URL"
-            value={formData.image}
-            onChange={handleChange}
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "15px" }}>
-          <label>Stock</label>
-          <input
-            type="number"
-            name="stock"
-            placeholder="Enter stock quantity"
-            value={formData.stock}
-            onChange={handleChange}
-            min="0"
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "15px" }}>
-          <label>Rating</label>
-          <input
-            type="number"
-            name="rating"
-            placeholder="Enter rating"
-            value={formData.rating}
-            onChange={handleChange}
-            min="0"
-            max="5"
-            step="0.1"
-            required
-            style={{
-              width: "100%",
-              padding: "10px",
-              marginTop: "5px",
-            }}
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            padding: "12px 24px",
-            fontSize: "16px",
-            cursor: loading ? "not-allowed" : "pointer",
-            borderRadius: "6px",
-            border: "none",
-          }}
-        >
-          {loading ? "Adding Product..." : "Add Product"}
-        </button>
-      </form>
-    </div>
-  );
+    );
 }
 
 export default AddProduct;

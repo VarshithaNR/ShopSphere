@@ -1,135 +1,178 @@
+const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
+const AppError = require("../utils/AppError");
+const isValidObjectId = require("../utils/validateObjectId");
 
-const createOrder = async(req, res) => {
+const ALLOWED_PAYMENT_METHODS = ["Cash on Delivery", "UPI", "Card"];
+
+const isNonEmptyString = (value) =>
+    typeof value === "string" && value.trim().length > 0;
+
+const validateCustomer = (customer) => {
+    if (
+        !customer ||
+        !isNonEmptyString(customer.fullName) ||
+        !isNonEmptyString(customer.email) ||
+        !isNonEmptyString(customer.phone) ||
+        !isNonEmptyString(customer.address)
+    ) {
+        throw new AppError(400, "Complete shipping information is required");
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(customer.email.trim())) {
+        throw new AppError(400, "A valid email address is required");
+    }
+
+    const phonePattern = /^[0-9+\-\s()]{7,20}$/;
+    if (!phonePattern.test(customer.phone.trim())) {
+        throw new AppError(400, "A valid phone number is required");
+    }
+};
+
+// Creates an order. Price and totalAmount are NEVER trusted from the client —
+// they are always recalculated from the current product prices in MongoDB.
+// Stock is decremented atomically per item inside a transaction so two
+// concurrent orders can't both succeed against the same last unit of stock.
+const createOrder = async(req, res, next) => {
+    const session = await mongoose.startSession();
+
     try {
-        const {
-            customer,
-            items,
-            totalAmount,
-            paymentMethod,
-        } = req.body;
+        session.startTransaction();
 
         if (!req.user || !req.user.id) {
-            return res.status(401).json({
-                success: false,
-                message: "User authentication is required",
-            });
+            throw new AppError(401, "User authentication is required");
         }
 
-        if (!customer ||
-            !customer.fullName ||
-            !customer.email ||
-            !customer.phone ||
-            !customer.address
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Customer information is required",
-            });
+        const { customer, items, paymentMethod } = req.body;
+
+        validateCustomer(customer);
+
+        if (!Array.isArray(items) || items.length === 0) {
+            throw new AppError(400, "Order must contain at least one product");
         }
 
-        if (!items || items.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Order must contain at least one product",
-            });
+        if (items.length > 100) {
+            throw new AppError(400, "Order contains too many line items");
         }
 
-        if (
-            totalAmount === undefined ||
-            typeof totalAmount !== "number" ||
-            totalAmount < 0
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Valid total amount is required",
-            });
+        if (!ALLOWED_PAYMENT_METHODS.includes(paymentMethod)) {
+            throw new AppError(400, "Invalid payment method");
         }
 
-        const allowedPaymentMethods = [
-            "Cash on Delivery",
-            "UPI",
-            "Card",
-        ];
-
-        if (!allowedPaymentMethods.includes(paymentMethod)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid payment method",
-            });
-        }
-
-        // Validate every product and latest stock
-        for (const item of items) {
-            if (!item.product ||
-                !item.name ||
-                typeof item.price !== "number" ||
-                !Number.isInteger(item.quantity) ||
-                item.quantity < 1
+        // Merge duplicate product IDs so a crafted payload with the same
+        // product listed twice can't be used to bypass the stock check.
+        const quantityByProduct = new Map();
+        for (const rawItem of items) {
+            if (
+                !rawItem ||
+                !isValidObjectId(rawItem.product) ||
+                !Number.isInteger(rawItem.quantity) ||
+                rawItem.quantity < 1 ||
+                rawItem.quantity > 1000
             ) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid product information in order",
-                });
+                throw new AppError(400, "Invalid product or quantity in order");
             }
 
-            const product = await Product.findById(
-                item.product
-            );
-
-            if (!product) {
-                return res.status(404).json({
-                    success: false,
-                    message: `Product not found: ${item.name}`,
-                });
-            }
-
-            if (product.stock < item.quantity) {
-                return res.status(400).json({
-                    success: false,
-                    message: `Not enough stock for ${product.name}. Available stock: ${product.stock}`,
-                });
-            }
+            const productId = String(rawItem.product);
+            const existingQty = quantityByProduct.get(productId) || 0;
+            quantityByProduct.set(productId, existingQty + rawItem.quantity);
         }
 
-        // Reduce stock after all products pass validation
-        for (const item of items) {
-            await Product.findByIdAndUpdate(
-                item.product, {
-                    $inc: {
-                        stock: -item.quantity,
-                    },
+        const orderItems = [];
+        let totalAmount = 0;
+
+        for (const [productId, quantity] of quantityByProduct.entries()) {
+            // Atomic "check stock AND decrement" in one operation — this is
+            // what actually prevents the race condition, not just the
+            // transaction wrapper around it.
+            const updatedProduct = await Product.findOneAndUpdate(
+                { _id: productId, stock: { $gte: quantity } },
+                { $inc: { stock: -quantity } },
+                { new: true, session }
+            );
+
+            if (!updatedProduct) {
+                const existingProduct = await Product.findById(productId).session(session);
+
+                if (!existingProduct) {
+                    throw new AppError(404, "One or more products in your order no longer exist");
                 }
-            );
+
+                throw new AppError(
+                    400,
+                    `Not enough stock for ${existingProduct.name}. Available: ${existingProduct.stock}`
+                );
+            }
+
+            // Server-computed price — the client's price/totalAmount is never used.
+            const lineTotal = updatedProduct.price * quantity;
+            totalAmount += lineTotal;
+
+            orderItems.push({
+                product: updatedProduct._id,
+                name: updatedProduct.name,
+                price: updatedProduct.price,
+                quantity,
+            });
         }
 
-        const order = await Order.create({
-            user: req.user.id,
-            customer,
-            items,
-            totalAmount,
-            paymentMethod,
-        });
+        const createdOrders = await Order.create(
+            [{
+                user: req.user.id,
+                customer: {
+                    fullName: customer.fullName.trim(),
+                    email: customer.email.trim().toLowerCase(),
+                    phone: customer.phone.trim(),
+                    address: customer.address.trim(),
+                },
+                items: orderItems,
+                totalAmount: Number(totalAmount.toFixed(2)),
+                paymentMethod,
+            }],
+            { session }
+        );
+
+        await session.commitTransaction();
+        session.endSession();
 
         res.status(201).json({
             success: true,
             message: "Order created successfully",
-            order,
+            order: createdOrders[0],
         });
     } catch (error) {
-        console.error("Create order error:", error);
-
-        res.status(500).json({
-            success: false,
-            message: "Failed to create order",
-        });
+        await session.abortTransaction().catch(() => {});
+        session.endSession();
+        next(error);
     }
 };
 
-const getOrders = async(req, res) => {
+const getOrders = async(req, res, next) => {
     try {
-        const orders = await Order.find()
+        const { status, search } = req.query;
+        const filter = {};
+
+        if (status) {
+            filter.status = status;
+        }
+
+        if (search && search.trim()) {
+            const term = search.trim();
+            const orClauses = [
+                { "customer.fullName": { $regex: term, $options: "i" } },
+                { "customer.email": { $regex: term, $options: "i" } },
+            ];
+
+            if (isValidObjectId(term)) {
+                orClauses.push({ _id: term });
+            }
+
+            filter.$or = orClauses;
+        }
+
+        const orders = await Order.find(filter)
             .populate("user", "name email")
             .populate("items.product")
             .sort({ createdAt: -1 });
@@ -139,22 +182,14 @@ const getOrders = async(req, res) => {
             orders,
         });
     } catch (error) {
-        console.error("Get orders error:", error);
-
-        res.status(500).json({
-            success: false,
-            message: "Failed to fetch orders",
-        });
+        next(error);
     }
 };
 
-const getMyOrders = async(req, res) => {
+const getMyOrders = async(req, res, next) => {
     try {
         if (!req.user || !req.user.id) {
-            return res.status(401).json({
-                success: false,
-                message: "User authentication is required",
-            });
+            throw new AppError(401, "User authentication is required");
         }
 
         const orders = await Order.find({
@@ -168,22 +203,18 @@ const getMyOrders = async(req, res) => {
             orders,
         });
     } catch (error) {
-        console.error("Get my orders error:", error);
-
-        res.status(500).json({
-            success: false,
-            message: "Failed to fetch your orders",
-        });
+        next(error);
     }
 };
 
-const getMyOrderById = async(req, res) => {
+const getMyOrderById = async(req, res, next) => {
     try {
         if (!req.user || !req.user.id) {
-            return res.status(401).json({
-                success: false,
-                message: "User authentication is required",
-            });
+            throw new AppError(401, "User authentication is required");
+        }
+
+        if (!isValidObjectId(req.params.id)) {
+            throw new AppError(400, "Invalid order ID");
         }
 
         const order = await Order.findOne({
@@ -192,10 +223,7 @@ const getMyOrderById = async(req, res) => {
         }).populate("items.product");
 
         if (!order) {
-            return res.status(404).json({
-                success: false,
-                message: "Order not found",
-            });
+            throw new AppError(404, "Order not found");
         }
 
         res.status(200).json({
@@ -203,26 +231,22 @@ const getMyOrderById = async(req, res) => {
             order,
         });
     } catch (error) {
-        console.error("Get my order error:", error);
-
-        res.status(500).json({
-            success: false,
-            message: "Failed to fetch order",
-        });
+        next(error);
     }
 };
 
-const getOrderById = async(req, res) => {
+const getOrderById = async(req, res, next) => {
     try {
+        if (!isValidObjectId(req.params.id)) {
+            throw new AppError(400, "Invalid order ID");
+        }
+
         const order = await Order.findById(req.params.id)
             .populate("user", "name email")
             .populate("items.product");
 
         if (!order) {
-            return res.status(404).json({
-                success: false,
-                message: "Order not found",
-            });
+            throw new AppError(404, "Order not found");
         }
 
         res.status(200).json({
@@ -230,17 +254,16 @@ const getOrderById = async(req, res) => {
             order,
         });
     } catch (error) {
-        console.error("Get order error:", error);
-
-        res.status(500).json({
-            success: false,
-            message: "Failed to fetch order",
-        });
+        next(error);
     }
 };
 
-const updateOrderStatus = async(req, res) => {
+const updateOrderStatus = async(req, res, next) => {
     try {
+        if (!isValidObjectId(req.params.id)) {
+            throw new AppError(400, "Invalid order ID");
+        }
+
         const { status } = req.body;
 
         const allowedStatuses = [
@@ -252,26 +275,20 @@ const updateOrderStatus = async(req, res) => {
         ];
 
         if (!allowedStatuses.includes(status)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid order status",
-            });
+            throw new AppError(400, "Invalid order status");
         }
 
         const order = await Order.findByIdAndUpdate(
             req.params.id, {
                 status,
             }, {
-                returnDocument: "after",
+                new: true,
                 runValidators: true,
             }
         );
 
         if (!order) {
-            return res.status(404).json({
-                success: false,
-                message: "Order not found",
-            });
+            throw new AppError(404, "Order not found");
         }
 
         res.status(200).json({
@@ -280,15 +297,7 @@ const updateOrderStatus = async(req, res) => {
             order,
         });
     } catch (error) {
-        console.error(
-            "Update order status error:",
-            error
-        );
-
-        res.status(500).json({
-            success: false,
-            message: "Failed to update order status",
-        });
+        next(error);
     }
 };
 

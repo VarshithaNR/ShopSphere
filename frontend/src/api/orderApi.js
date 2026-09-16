@@ -1,37 +1,32 @@
-import API from "./productApi";
+import client from "./client";
 
 export const createOrder = async(orderData) => {
-    const token = localStorage.getItem("token");
-
-    const response = await API.post("/orders", orderData, {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    });
-
+    const response = await client.post("/orders", orderData);
     return response.data;
 };
 
-export const getOrders = async() => {
-    const token = localStorage.getItem("token");
-
-    const response = await API.get("/orders", {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    });
-
+export const getMyOrders = async() => {
+    const response = await client.get("/orders");
     return response.data;
 };
 
-export const getOrderById = async(orderId) => {
-    const token = localStorage.getItem("token");
+export const getMyOrderById = async(orderId) => {
+    const response = await client.get(`/orders/${orderId}`);
+    return response.data;
+};
 
-    const response = await API.get(`/orders/${orderId}`, {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    });
+// Admin-only endpoints
+export const getAllOrders = async(params = {}) => {
+    const response = await client.get("/admin/orders", { params });
+    return response.data;
+};
 
+export const getOrderByIdAdmin = async(orderId) => {
+    const response = await client.get(`/admin/orders/${orderId}`);
+    return response.data;
+};
+
+export const updateOrderStatus = async(orderId, status) => {
+    const response = await client.put(`/admin/orders/${orderId}/status`, { status });
     return response.data;
 };

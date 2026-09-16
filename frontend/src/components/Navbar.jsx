@@ -1,196 +1,108 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { useCart } from "../context/CartContext";
 
 function Navbar() {
-  const navigate = useNavigate();
+    const navigate = useNavigate();
+    const { user, isAdmin, logout } = useAuth();
+    const { itemCount } = useCart();
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
 
-  const [cartCount, setCartCount] = useState(0);
-  const [user, setUser] = useState(null);
+    const closeMenu = () => setMenuOpen(false);
 
-  useEffect(() => {
-    const updateCartCount = () => {
-      const cart = JSON.parse(localStorage.getItem("cart")) || [];
-
-      const count = cart.reduce(
-        (total, item) => total + item.quantity,
-        0
-      );
-
-      setCartCount(count);
+    const handleLogout = () => {
+        logout();
+        closeMenu();
+        navigate("/login");
     };
 
-    const updateUser = () => {
-      const savedUser = localStorage.getItem("user");
-
-      if (savedUser) {
-        setUser(JSON.parse(savedUser));
-      } else {
-        setUser(null);
-      }
+    const handleSearchSubmit = (e) => {
+        e.preventDefault();
+        closeMenu();
+        const query = searchTerm.trim();
+        navigate(query ? `/products?search=${encodeURIComponent(query)}` : "/products");
     };
 
-    updateCartCount();
-    updateUser();
+    return (
+        <header className="navbar">
+            <div className="navbar__bar">
+                <Link to="/" className="navbar__brand" onClick={closeMenu}>
+                    Shop<span>Sphere</span>
+                </Link>
 
-    window.addEventListener("cartUpdated", updateCartCount);
-    window.addEventListener("authUpdated", updateUser);
+                <form className="navbar__search" onSubmit={handleSearchSubmit} role="search">
+                    <input
+                        type="search"
+                        className="input"
+                        placeholder="Search products..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        aria-label="Search products"
+                    />
+                    <button type="submit" className="btn btn--primary btn--sm" aria-label="Search">
+                        Search
+                    </button>
+                </form>
 
-    return () => {
-      window.removeEventListener(
-        "cartUpdated",
-        updateCartCount
-      );
+                <button
+                    className="navbar__toggle"
+                    onClick={() => setMenuOpen((open) => !open)}
+                    aria-expanded={menuOpen}
+                    aria-controls="navbar-menu"
+                    aria-label={menuOpen ? "Close menu" : "Open menu"}
+                >
+                    <span />
+                    <span />
+                    <span />
+                </button>
+            </div>
 
-      window.removeEventListener(
-        "authUpdated",
-        updateUser
-      );
-    };
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-
-    window.dispatchEvent(new Event("authUpdated"));
-
-    setUser(null);
-
-    navigate("/login");
-  };
-
-  return (
-    <nav
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "15px 30px",
-        borderBottom: "1px solid #ddd",
-        flexWrap: "wrap",
-        gap: "15px",
-      }}
-    >
-      <Link
-        to="/"
-        style={{
-          textDecoration: "none",
-          color: "black",
-          fontSize: "24px",
-          fontWeight: "bold",
-        }}
-      >
-        ShopSphere
-      </Link>
-
-      <div
-        style={{
-          display: "flex",
-          gap: "20px",
-          flexWrap: "wrap",
-          alignItems: "center",
-        }}
-      >
-        <Link
-          to="/"
-          style={{
-            textDecoration: "none",
-            color: "black",
-          }}
-        >
-          Products
-        </Link>
-
-        {user && (
-          <Link
-            to="/orders"
-            style={{
-              textDecoration: "none",
-              color: "black",
-            }}
-          >
-            Orders
-          </Link>
-        )}
-
-        <Link
-          to="/cart"
-          style={{
-            textDecoration: "none",
-            color: "black",
-          }}
-        >
-          Cart ({cartCount})
-        </Link>
-
-        {user?.role === "admin" && (
-          <>
-            <Link
-              to="/admin/products"
-              style={{
-                textDecoration: "none",
-                color: "black",
-              }}
+            <nav
+                id="navbar-menu"
+                className={`navbar__menu${menuOpen ? " navbar__menu--open" : ""}`}
+                aria-label="Main navigation"
             >
-              Admin Products
-            </Link>
+                <Link to="/" onClick={closeMenu}>Home</Link>
+                <Link to="/products" onClick={closeMenu}>Products</Link>
 
-            <Link
-              to="/admin/orders"
-              style={{
-                textDecoration: "none",
-                color: "black",
-              }}
-            >
-              Admin Orders
-            </Link>
-          </>
-        )}
+                {user && <Link to="/orders" onClick={closeMenu}>My Orders</Link>}
 
-        {user ? (
-          <>
-            <span>
-              Welcome, {user.name}
-            </span>
+                {isAdmin && (
+                    <>
+                        <Link to="/admin/dashboard" onClick={closeMenu}>Admin Dashboard</Link>
+                        <Link to="/admin/products" onClick={closeMenu}>Admin Products</Link>
+                        <Link to="/admin/orders" onClick={closeMenu}>Admin Orders</Link>
+                    </>
+                )}
 
-            <button
-              onClick={handleLogout}
-              style={{
-                padding: "8px 14px",
-                cursor: "pointer",
-                borderRadius: "6px",
-                border: "none",
-              }}
-            >
-              Logout
-            </button>
-          </>
-        ) : (
-          <>
-            <Link
-              to="/login"
-              style={{
-                textDecoration: "none",
-                color: "black",
-              }}
-            >
-              Login
-            </Link>
+                <Link to="/cart" className="navbar__cart" onClick={closeMenu}>
+                    Cart
+                    <span className="navbar__cart-count" aria-hidden="true">{itemCount}</span>
+                    <span className="visually-hidden">, {itemCount} items</span>
+                </Link>
 
-            <Link
-              to="/register"
-              style={{
-                textDecoration: "none",
-                color: "black",
-              }}
-            >
-              Register
-            </Link>
-          </>
-        )}
-      </div>
-    </nav>
-  );
+                {user ? (
+                    <div className="navbar__user">
+                        <span className="text-sm text-muted">Hi, {user.name.split(" ")[0]}</span>
+                        <button className="btn btn--outline btn--sm" onClick={handleLogout}>
+                            Logout
+                        </button>
+                    </div>
+                ) : (
+                    <div className="row" style={{ gap: 8 }}>
+                        <Link to="/login" className="btn btn--outline btn--sm" onClick={closeMenu}>
+                            Login
+                        </Link>
+                        <Link to="/register" className="btn btn--primary btn--sm" onClick={closeMenu}>
+                            Register
+                        </Link>
+                    </div>
+                )}
+            </nav>
+        </header>
+    );
 }
 
 export default Navbar;

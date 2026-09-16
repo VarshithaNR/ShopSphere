@@ -1,6 +1,9 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const AppError = require("../utils/AppError");
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const generateToken = (user) => {
     return jwt.sign({
@@ -13,40 +16,47 @@ const generateToken = (user) => {
     );
 };
 
-const registerUser = async(req, res) => {
+const registerUser = async(req, res, next) => {
     try {
         const { name, email, password } = req.body;
 
-        if (!name || !email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: "Name, email and password are required",
-            });
+        if (
+            typeof name !== "string" || !name.trim() ||
+            typeof email !== "string" || !email.trim() ||
+            typeof password !== "string" || !password
+        ) {
+            throw new AppError(400, "Name, email and password are required");
+        }
+
+        if (name.trim().length > 100) {
+            throw new AppError(400, "Name is too long");
+        }
+
+        if (!EMAIL_PATTERN.test(email.trim())) {
+            throw new AppError(400, "Please provide a valid email address");
         }
 
         if (password.length < 6) {
-            return res.status(400).json({
-                success: false,
-                message: "Password must be at least 6 characters",
-            });
+            throw new AppError(400, "Password must be at least 6 characters");
         }
 
-        const existingUser = await User.findOne({
-            email: email.toLowerCase(),
-        });
+        if (password.length > 128) {
+            throw new AppError(400, "Password is too long");
+        }
+
+        const normalizedEmail = email.trim().toLowerCase();
+
+        const existingUser = await User.findOne({ email: normalizedEmail });
 
         if (existingUser) {
-            return res.status(400).json({
-                success: false,
-                message: "User with this email already exists",
-            });
+            throw new AppError(400, "User with this email already exists");
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const user = await User.create({
-            name,
-            email: email.toLowerCase(),
+            name: name.trim(),
+            email: normalizedEmail,
             password: hashedPassword,
             role: "user",
         });
@@ -65,47 +75,35 @@ const registerUser = async(req, res) => {
             },
         });
     } catch (error) {
-        console.error("Register error:", error);
-
-        res.status(500).json({
-            success: false,
-            message: "Failed to register user",
-        });
+        if (error.code === 11000) {
+            return next(new AppError(400, "User with this email already exists"));
+        }
+        next(error);
     }
 };
 
-const loginUser = async(req, res) => {
+const loginUser = async(req, res, next) => {
     try {
         const { email, password } = req.body;
 
-        if (!email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: "Email and password are required",
-            });
+        if (typeof email !== "string" || !email.trim() || typeof password !== "string" || !password) {
+            throw new AppError(400, "Email and password are required");
         }
 
         const user = await User.findOne({
-            email: email.toLowerCase(),
+            email: email.trim().toLowerCase(),
         });
 
+        // Same generic message whether the email doesn't exist or the
+        // password is wrong — avoids leaking which emails are registered.
         if (!user) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid email or password",
-            });
+            throw new AppError(401, "Invalid email or password");
         }
 
-        const passwordMatch = await bcrypt.compare(
-            password,
-            user.password
-        );
+        const passwordMatch = await bcrypt.compare(password, user.password);
 
         if (!passwordMatch) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid email or password",
-            });
+            throw new AppError(401, "Invalid email or password");
         }
 
         const token = generateToken(user);
@@ -122,12 +120,7 @@ const loginUser = async(req, res) => {
             },
         });
     } catch (error) {
-        console.error("Login error:", error);
-
-        res.status(500).json({
-            success: false,
-            message: "Failed to login",
-        });
+        next(error);
     }
 };
 

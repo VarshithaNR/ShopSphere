@@ -1,12 +1,29 @@
-import axios from "axios";
+import client from "./client";
 
-const API = axios.create({
-    baseURL: "http://localhost:5000/api",
-});
-
-export const getProducts = async() => {
-    const response = await API.get("/products");
+// `params` may include: search, category, minPrice, maxPrice, sort, inStock, page, limit
+export const getProducts = async(params = {}) => {
+    const response = await client.get("/products", { params });
     return response.data;
 };
 
-export default API;
+export const getProductById = async(id) => {
+    const response = await client.get(`/products/${id}`);
+    return response.data;
+};
+
+export const createProduct = async(productData) => {
+    const response = await client.post("/products", productData);
+    return response.data;
+};
+
+export const updateProduct = async(id, productData) => {
+    const response = await client.put(`/products/${id}`, productData);
+    return response.data;
+};
+
+export const deleteProduct = async(id) => {
+    const response = await client.delete(`/products/${id}`);
+    return response.data;
+};
+
+export default client;

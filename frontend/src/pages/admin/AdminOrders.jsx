@@ -1,258 +1,150 @@
 import { useEffect, useState } from "react";
-import API from "../../api/productApi";
+import { Link } from "react-router-dom";
+import { getAllOrders, updateOrderStatus } from "../../api/orderApi";
+import { getErrorMessage } from "../../api/client";
+import { useToast } from "../../context/ToastContext";
+import Spinner from "../../components/Spinner";
+import StateMessage from "../../components/StateMessage";
+import OrderStatusBadge from "../../components/OrderStatusBadge";
+
+const STATUS_OPTIONS = ["Pending", "Confirmed", "Shipped", "Delivered", "Cancelled"];
+
+const formatDate = (isoDate) =>
+    new Date(isoDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
 function AdminOrders() {
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [updatingOrderId, setUpdatingOrderId] = useState(null);
+    const toast = useToast();
+    const [orders, setOrders] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+    const [statusFilter, setStatusFilter] = useState("");
+    const [search, setSearch] = useState("");
+    const [updatingId, setUpdatingId] = useState(null);
 
-  const fetchOrders = async () => {
-    try {
-      const token = localStorage.getItem("token");
-
-      const response = await API.get("/admin/orders", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      setOrders(response.data.orders);
-    } catch (error) {
-      console.error(
-        "Failed to fetch admin orders:",
-        error
-      );
-
-      if (error.response?.status === 401) {
-        alert("Please login to access admin orders.");
-      }
-
-      if (error.response?.status === 403) {
-        alert("Access denied. Admin only.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchOrders();
-  }, []);
-
-  const handleStatusChange = async (
-    orderId,
-    newStatus
-  ) => {
-    try {
-      setUpdatingOrderId(orderId);
-
-      const token = localStorage.getItem("token");
-
-      const response = await API.put(
-        `/admin/orders/${orderId}/status`,
-        {
-          status: newStatus,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+    const fetchOrders = async () => {
+        setLoading(true);
+        setError("");
+        try {
+            const data = await getAllOrders({
+                status: statusFilter || undefined,
+                search: search || undefined,
+            });
+            setOrders(data.orders);
+        } catch (err) {
+            setError(getErrorMessage(err, "Failed to load orders."));
+        } finally {
+            setLoading(false);
         }
-      );
+    };
 
-      setOrders((currentOrders) =>
-        currentOrders.map((order) =>
-          order._id === orderId
-            ? {
-                ...order,
-                status: response.data.order.status,
-              }
-            : order
-        )
-      );
+    useEffect(() => {
+        const timer = setTimeout(fetchOrders, search ? 350 : 0);
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [statusFilter, search]);
 
-      alert("Order status updated successfully!");
-    } catch (error) {
-      console.error(
-        "Failed to update order status:",
-        error
-      );
+    const handleStatusChange = async (orderId, newStatus) => {
+        setUpdatingId(orderId);
+        try {
+            const data = await updateOrderStatus(orderId, newStatus);
+            setOrders((current) =>
+                current.map((order) => (order._id === orderId ? { ...order, status: data.order.status } : order))
+            );
+            toast.success("Order status updated.");
+        } catch (err) {
+            toast.error(getErrorMessage(err, "Failed to update order status."));
+        } finally {
+            setUpdatingId(null);
+        }
+    };
 
-      const message =
-        error.response?.data?.message ||
-        "Failed to update order status.";
-
-      alert(message);
-    } finally {
-      setUpdatingOrderId(null);
-    }
-  };
-
-  if (loading) {
     return (
-      <p style={{ padding: "30px" }}>
-        Loading orders...
-      </p>
-    );
-  }
+        <div>
+            <h1>Orders</h1>
 
-  return (
-    <div
-      style={{
-        padding: "30px",
-        maxWidth: "1200px",
-        margin: "0 auto",
-      }}
-    >
-      <h1>Admin - Order Management</h1>
-
-      {orders.length === 0 ? (
-        <p>No orders found.</p>
-      ) : (
-        orders.map((order) => (
-          <div
-            key={order._id}
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: "10px",
-              padding: "20px",
-              marginTop: "20px",
-            }}
-          >
-            <h2>Order #{order._id}</h2>
-
-            <p>
-              <strong>Status:</strong>{" "}
-              {order.status}
-            </p>
-
-            <div style={{ marginBottom: "20px" }}>
-              <label>
-                <strong>Update Status:</strong>
-              </label>
-
-              <br />
-
-              <select
-                value={order.status}
-                disabled={
-                  updatingOrderId === order._id
-                }
-                onChange={(e) =>
-                  handleStatusChange(
-                    order._id,
-                    e.target.value
-                  )
-                }
-                style={{
-                  padding: "10px",
-                  marginTop: "8px",
-                  fontSize: "16px",
-                  borderRadius: "6px",
-                  border: "1px solid #ccc",
-                }}
-              >
-                <option value="Pending">
-                  Pending
-                </option>
-
-                <option value="Confirmed">
-                  Confirmed
-                </option>
-
-                <option value="Shipped">
-                  Shipped
-                </option>
-
-                <option value="Delivered">
-                  Delivered
-                </option>
-
-                <option value="Cancelled">
-                  Cancelled
-                </option>
-              </select>
-
-              {updatingOrderId === order._id && (
-                <span style={{ marginLeft: "10px" }}>
-                  Updating...
-                </span>
-              )}
+            <div className="filter-bar">
+                <input
+                    type="search"
+                    className="input filter-bar__search"
+                    placeholder="Search by customer name, email or order ID..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    aria-label="Search orders"
+                />
+                <select
+                    className="input select"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    aria-label="Filter by status"
+                >
+                    <option value="">All Statuses</option>
+                    {STATUS_OPTIONS.map((status) => (
+                        <option key={status} value={status}>{status}</option>
+                    ))}
+                </select>
             </div>
 
-            <p>
-              <strong>Total Amount:</strong> ₹
-              {order.totalAmount}
-            </p>
+            {loading && <Spinner fullPage label="Loading orders..." />}
 
-            <p>
-              <strong>Payment Method:</strong>{" "}
-              {order.paymentMethod ||
-                "Not specified"}
-            </p>
+            {!loading && error && <StateMessage icon="⚠️" title="Couldn't load orders" message={error} />}
 
-            <h3>Customer Information</h3>
+            {!loading && !error && orders.length === 0 && (
+                <StateMessage icon="🧾" title="No orders found" message="No orders match your current filters." />
+            )}
 
-            <p>
-              <strong>Name:</strong>{" "}
-              {order.customer.fullName}
-            </p>
-
-            <p>
-              <strong>Email:</strong>{" "}
-              {order.customer.email}
-            </p>
-
-            <p>
-              <strong>Phone:</strong>{" "}
-              {order.customer.phone}
-            </p>
-
-            <p>
-              <strong>Address:</strong>{" "}
-              {order.customer.address}
-            </p>
-
-            <h3>Ordered Products</h3>
-
-            {order.items.map((item) => (
-              <div
-                key={item._id}
-                style={{
-                  borderTop: "1px solid #eee",
-                  padding: "10px 0",
-                }}
-              >
-                <p>
-                  <strong>{item.name}</strong>
-                </p>
-
-                <p>
-                  Price: ₹{item.price}
-                </p>
-
-                <p>
-                  Quantity: {item.quantity}
-                </p>
-
-                <p>
-                  Subtotal: ₹
-                  {item.price * item.quantity}
-                </p>
-              </div>
-            ))}
-
-            <p>
-              <strong>Order Date:</strong>{" "}
-              {new Date(
-                order.createdAt
-              ).toLocaleString()}
-            </p>
-          </div>
-        ))
-      )}
-    </div>
-  );
+            {!loading && !error && orders.length > 0 && (
+                <div className="card table-wrap">
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>Order</th>
+                                <th>Customer</th>
+                                <th>Date</th>
+                                <th>Items</th>
+                                <th>Total</th>
+                                <th>Payment</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {orders.map((order) => (
+                                <tr key={order._id}>
+                                    <td>
+                                        <Link to={`/orders/${order._id}`}>#{order._id.slice(-8).toUpperCase()}</Link>
+                                    </td>
+                                    <td>
+                                        <div>{order.customer?.fullName}</div>
+                                        <div className="text-muted text-sm">{order.customer?.email}</div>
+                                    </td>
+                                    <td>{formatDate(order.createdAt)}</td>
+                                    <td>{order.items.length}</td>
+                                    <td>₹{order.totalAmount.toLocaleString("en-IN")}</td>
+                                    <td>{order.paymentMethod}</td>
+                                    <td>
+                                        <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                                            <OrderStatusBadge status={order.status} />
+                                            <select
+                                                className="input select"
+                                                style={{ minWidth: 130, padding: "6px 8px", fontSize: 13 }}
+                                                value={order.status}
+                                                disabled={updatingId === order._id}
+                                                onChange={(e) => handleStatusChange(order._id, e.target.value)}
+                                                aria-label={`Update status for order ${order._id}`}
+                                            >
+                                                {STATUS_OPTIONS.map((status) => (
+                                                    <option key={status} value={status}>{status}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
 }
 
 export default AdminOrders;
