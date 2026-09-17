@@ -12,6 +12,7 @@ const recalculateProductRating = async(productId) => {
 
     await Product.findByIdAndUpdate(productId, {
         rating: Number(averageRating.toFixed(1)),
+        numReviews: reviews.length,
     });
 };
 

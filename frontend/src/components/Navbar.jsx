@@ -2,11 +2,13 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
+import { useWishlist } from "../context/WishlistContext";
 
 function Navbar() {
     const navigate = useNavigate();
     const { user, isAdmin, logout } = useAuth();
     const { itemCount } = useCart();
+    const { count: wishlistCount } = useWishlist();
     const [menuOpen, setMenuOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
 
@@ -68,6 +70,13 @@ function Navbar() {
                 <Link to="/products" onClick={closeMenu}>Products</Link>
 
                 {user && <Link to="/orders" onClick={closeMenu}>My Orders</Link>}
+                {user && (
+                    <Link to="/wishlist" className="navbar__cart" onClick={closeMenu}>
+                        Wishlist
+                        <span className="navbar__cart-count" aria-hidden="true">{wishlistCount}</span>
+                        <span className="visually-hidden">, {wishlistCount} items</span>
+                    </Link>
+                )}
 
                 {isAdmin && (
                     <>
@@ -85,7 +94,9 @@ function Navbar() {
 
                 {user ? (
                     <div className="navbar__user">
-                        <span className="text-sm text-muted">Hi, {user.name.split(" ")[0]}</span>
+                        <Link to="/account" className="text-sm text-muted" onClick={closeMenu}>
+                            Hi, {user.name.split(" ")[0]}
+                        </Link>
                         <button className="btn btn--outline btn--sm" onClick={handleLogout}>
                             Logout
                         </button>

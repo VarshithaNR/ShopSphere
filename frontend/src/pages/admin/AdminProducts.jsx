@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getProducts, deleteProduct } from "../../api/productApi";
 import { getErrorMessage } from "../../api/client";
@@ -6,20 +6,40 @@ import { useToast } from "../../context/ToastContext";
 import Spinner from "../../components/Spinner";
 import StateMessage from "../../components/StateMessage";
 
+const STOCK_FILTERS = [
+    { value: "", label: "All Stock Levels" },
+    { value: "in", label: "In Stock" },
+    { value: "low", label: "Low Stock (≤5)" },
+    { value: "out", label: "Out of Stock" },
+];
+
 function AdminProducts() {
     const toast = useToast();
     const [products, setProducts] = useState([]);
+    const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
+    const [categoryFilter, setCategoryFilter] = useState("");
+    const [stockFilter, setStockFilter] = useState("");
     const [deletingId, setDeletingId] = useState(null);
 
     const fetchProducts = async () => {
         setLoading(true);
         setError("");
         try {
-            const data = await getProducts({ search: search || undefined });
+            const data = await getProducts({
+                search: search || undefined,
+                category: categoryFilter || undefined,
+            });
             setProducts(data.products);
+            // Build the category dropdown from an unfiltered fetch's worth of
+            // names the first time through, so options don't shrink as the
+            // admin filters.
+            setCategories((current) => {
+                if (current.length > 0) return current;
+                return [...new Set(data.products.map((p) => p.category))].sort();
+            });
         } catch (err) {
             setError(getErrorMessage(err, "Failed to load products."));
         } finally {
@@ -31,7 +51,17 @@ function AdminProducts() {
         const timer = setTimeout(fetchProducts, search ? 350 : 0);
         return () => clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [search]);
+    }, [search, categoryFilter]);
+
+    const visibleProducts = useMemo(() => {
+        if (!stockFilter) return products;
+        return products.filter((product) => {
+            if (stockFilter === "out") return product.stock === 0;
+            if (stockFilter === "low") return product.stock > 0 && product.stock <= 5;
+            if (stockFilter === "in") return product.stock > 5;
+            return true;
+        });
+    }, [products, stockFilter]);
 
     const handleDelete = async (productId, productName) => {
         if (!window.confirm(`Delete "${productName}"? This can't be undone.`)) return;
@@ -64,17 +94,44 @@ function AdminProducts() {
                     onChange={(e) => setSearch(e.target.value)}
                     aria-label="Search products"
                 />
+                <select
+                    className="input select"
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    aria-label="Filter by category"
+                >
+                    <option value="">All Categories</option>
+                    {categories.map((category) => (
+                        <option key={category} value={category}>{category}</option>
+                    ))}
+                </select>
+                <select
+                    className="input select"
+                    value={stockFilter}
+                    onChange={(e) => setStockFilter(e.target.value)}
+                    aria-label="Filter by stock level"
+                >
+                    {STOCK_FILTERS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                </select>
             </div>
+
+            {!loading && !error && (
+                <p className="text-muted text-sm" style={{ marginBottom: 12 }}>
+                    {visibleProducts.length} product{visibleProducts.length === 1 ? "" : "s"} found
+                </p>
+            )}
 
             {loading && <Spinner fullPage label="Loading products..." />}
 
             {!loading && error && <StateMessage icon="⚠️" title="Couldn't load products" message={error} />}
 
-            {!loading && !error && products.length === 0 && (
-                <StateMessage icon="📦" title="No products found" message="Try a different search, or add your first product." />
+            {!loading && !error && visibleProducts.length === 0 && (
+                <StateMessage icon="📦" title="No products found" message="Try a different search or filter, or add your first product." />
             )}
 
-            {!loading && !error && products.length > 0 && (
+            {!loading && !error && visibleProducts.length > 0 && (
                 <div className="card table-wrap">
                     <table className="data-table">
                         <thead>
@@ -88,7 +145,7 @@ function AdminProducts() {
                             </tr>
                         </thead>
                         <tbody>
-                            {products.map((product) => (
+                            {visibleProducts.map((product) => (
                                 <tr key={product._id}>
                                     <td>
                                         <div className="row" style={{ gap: 10 }}>

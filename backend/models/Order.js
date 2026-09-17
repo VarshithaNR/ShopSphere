@@ -85,6 +85,13 @@ const orderSchema = new mongoose.Schema({
         ],
         default: "Pending",
     },
+
+    // Tracks whether stock has already been restored for a cancelled order,
+    // so re-saving/re-updating a Cancelled order never restores stock twice.
+    stockRestored: {
+        type: Boolean,
+        default: false,
+    },
 }, {
     timestamps: true,
 });

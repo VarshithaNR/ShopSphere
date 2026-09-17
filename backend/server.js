@@ -13,9 +13,9 @@ const authRoutes = require("./routes/authRoutes");
 const adminOrderRoutes = require("./routes/adminOrderRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const wishlistRoutes = require("./routes/wishlistRoutes");
 
 const securityHeaders = require("./middleware/securityHeaders");
-const rateLimiter = require("./middleware/rateLimiter");
 const { notFound, errorHandler } = require("./middleware/errorMiddleware");
 
 dotenv.config();
@@ -68,14 +68,16 @@ app.get("/api/health", (req, res) => {
     });
 });
 
-// Auth routes are rate-limited against brute-force login/registration attempts.
-app.use("/api/auth", rateLimiter({ windowMs: 15 * 60 * 1000, max: 20 }), authRoutes);
+// Auth routes handle their own rate limiting internally, scoped to just
+// the register/login endpoints (see routes/authRoutes.js).
+app.use("/api/auth", authRoutes);
 
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/admin/orders", adminOrderRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/wishlist", wishlistRoutes);
 
 // Anything that doesn't match a route above.
 app.use(notFound);

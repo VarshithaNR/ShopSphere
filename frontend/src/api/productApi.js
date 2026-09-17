@@ -27,3 +27,8 @@ export const deleteProduct = async(id) => {
 };
 
 export default client;
+
+export const getRelatedProducts = async (id) => {
+    const response = await client.get(`/products/${id}/related`);
+    return response.data;
+};

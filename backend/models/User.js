@@ -26,6 +26,13 @@ const userSchema = new mongoose.Schema({
         enum: ["user", "admin"],
         default: "user",
     },
+
+    // Simple array-of-references wishlist — enough for one user's saved
+    // products without the overhead of a separate collection.
+    wishlist: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+    }],
 }, {
     timestamps: true,
 });

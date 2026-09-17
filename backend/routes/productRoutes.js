@@ -4,6 +4,7 @@ const {
     getProducts,
     createProduct,
     getProductById,
+    getRelatedProducts,
     updateProduct,
     deleteProduct,
 } = require("../controllers/productController");
@@ -16,6 +17,9 @@ const router = express.Router();
 router.get("/", getProducts);
 
 router.post("/", protect, admin, createProduct);
+
+// Must come before "/:id" so "related" in "/:id/related" isn't swallowed by it.
+router.get("/:id/related", getRelatedProducts);
 
 router.get("/:id", getProductById);
 

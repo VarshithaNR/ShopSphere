@@ -151,11 +151,15 @@ const createOrder = async(req, res, next) => {
 
 const getOrders = async(req, res, next) => {
     try {
-        const { status, search } = req.query;
+        const { status, paymentMethod, search } = req.query;
         const filter = {};
 
         if (status) {
             filter.status = status;
+        }
+
+        if (paymentMethod) {
+            filter.paymentMethod = paymentMethod;
         }
 
         if (search && search.trim()) {
@@ -258,38 +262,69 @@ const getOrderById = async(req, res, next) => {
     }
 };
 
+// Which status changes make sense. Delivered and Cancelled are terminal —
+// once there, no further changes. Setting the same status again is a no-op,
+// not an error (keeps the admin UI simple/idempotent).
+const ALLOWED_TRANSITIONS = {
+    Pending: ["Confirmed", "Cancelled"],
+    Confirmed: ["Shipped", "Cancelled"],
+    Shipped: ["Delivered", "Cancelled"],
+    Delivered: [],
+    Cancelled: [],
+};
+
 const updateOrderStatus = async(req, res, next) => {
+    const session = await mongoose.startSession();
+
     try {
+        session.startTransaction();
+
         if (!isValidObjectId(req.params.id)) {
             throw new AppError(400, "Invalid order ID");
         }
 
-        const { status } = req.body;
+        const { status: nextStatus } = req.body;
+        const allStatuses = Object.keys(ALLOWED_TRANSITIONS);
 
-        const allowedStatuses = [
-            "Pending",
-            "Confirmed",
-            "Shipped",
-            "Delivered",
-            "Cancelled",
-        ];
-
-        if (!allowedStatuses.includes(status)) {
+        if (!allStatuses.includes(nextStatus)) {
             throw new AppError(400, "Invalid order status");
         }
 
-        const order = await Order.findByIdAndUpdate(
-            req.params.id, {
-                status,
-            }, {
-                new: true,
-                runValidators: true,
-            }
-        );
+        const order = await Order.findById(req.params.id).session(session);
 
         if (!order) {
             throw new AppError(404, "Order not found");
         }
+
+        const currentStatus = order.status;
+
+        if (nextStatus !== currentStatus) {
+            const allowedNext = ALLOWED_TRANSITIONS[currentStatus] || [];
+            if (!allowedNext.includes(nextStatus)) {
+                throw new AppError(
+                    400,
+                    `Cannot change order status from "${currentStatus}" to "${nextStatus}"`
+                );
+            }
+        }
+
+        // Restore stock exactly once, only when actually transitioning into
+        // Cancelled. The stockRestored flag makes this idempotent even if
+        // this endpoint is called again for an already-cancelled order.
+        if (nextStatus === "Cancelled" && !order.stockRestored) {
+            for (const item of order.items) {
+                await Product.findByIdAndUpdate(
+                    item.product, { $inc: { stock: item.quantity } }, { session }
+                );
+            }
+            order.stockRestored = true;
+        }
+
+        order.status = nextStatus;
+        await order.save({ session });
+
+        await session.commitTransaction();
+        session.endSession();
 
         res.status(200).json({
             success: true,
@@ -297,6 +332,8 @@ const updateOrderStatus = async(req, res, next) => {
             order,
         });
     } catch (error) {
+        await session.abortTransaction().catch(() => {});
+        session.endSession();
         next(error);
     }
 };

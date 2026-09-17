@@ -18,13 +18,20 @@ client.interceptors.request.use((config) => {
 
 // If the token is invalid/expired, the backend returns 401. Clear the stale
 // session and let the app redirect to login instead of showing broken UI.
+// Only fire the "session expired" signal if there was actually a token to
+// begin with — a 401 on a fresh login attempt just means wrong credentials,
+// not an expired session.
 client.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401) {
+            const hadToken = Boolean(localStorage.getItem("token"));
             localStorage.removeItem("token");
             localStorage.removeItem("user");
             window.dispatchEvent(new Event("authUpdated"));
+            if (hadToken) {
+                window.dispatchEvent(new Event("sessionExpired"));
+            }
         }
         return Promise.reject(error);
     }

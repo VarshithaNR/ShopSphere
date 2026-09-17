@@ -12,6 +12,8 @@ const formatDate = (isoDate) =>
 function AdminDashboard() {
     const [stats, setStats] = useState(null);
     const [recentOrders, setRecentOrders] = useState([]);
+    const [lowStockProducts, setLowStockProducts] = useState([]);
+    const [recentProducts, setRecentProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
@@ -26,6 +28,8 @@ function AdminDashboard() {
                 if (cancelled) return;
                 setStats(data.stats);
                 setRecentOrders(data.recentOrders || []);
+                setLowStockProducts(data.lowStockProductList || []);
+                setRecentProducts(data.recentProducts || []);
             } catch (err) {
                 if (!cancelled) setError(getErrorMessage(err, "Failed to load dashboard statistics."));
             } finally {
@@ -102,6 +106,54 @@ function AdminDashboard() {
                     </table>
                 </div>
             )}
+
+            <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 20, marginTop: 32 }}>
+                <div>
+                    <h2>Low Stock Products</h2>
+                    {lowStockProducts.length === 0 ? (
+                        <p className="text-muted text-sm">No products are currently low on stock.</p>
+                    ) : (
+                        <div className="card table-wrap">
+                            <table className="data-table">
+                                <thead>
+                                    <tr><th>Product</th><th>Stock</th></tr>
+                                </thead>
+                                <tbody>
+                                    {lowStockProducts.map((product) => (
+                                        <tr key={product._id}>
+                                            <td><Link to={`/admin/products/edit/${product._id}`}>{product.name}</Link></td>
+                                            <td><span className="badge badge--warning">{product.stock} left</span></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+
+                <div>
+                    <h2>Recently Added Products</h2>
+                    {recentProducts.length === 0 ? (
+                        <p className="text-muted text-sm">No products yet.</p>
+                    ) : (
+                        <div className="card table-wrap">
+                            <table className="data-table">
+                                <thead>
+                                    <tr><th>Product</th><th>Price</th></tr>
+                                </thead>
+                                <tbody>
+                                    {recentProducts.map((product) => (
+                                        <tr key={product._id}>
+                                            <td><Link to={`/admin/products/edit/${product._id}`}>{product.name}</Link></td>
+                                            <td>₹{product.price.toLocaleString("en-IN")}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 }

@@ -44,12 +44,24 @@ export function AuthProvider({ children }) {
         window.dispatchEvent(new Event("authUpdated"));
     }, []);
 
+    // Patches the stored user object (e.g. after a profile edit) without
+    // touching the token or forcing a re-login.
+    const updateUser = useCallback((patch) => {
+        setUser((current) => {
+            if (!current) return current;
+            const next = { ...current, ...patch };
+            localStorage.setItem("user", JSON.stringify(next));
+            return next;
+        });
+    }, []);
+
     const value = {
         user,
         isAuthenticated: Boolean(user),
         isAdmin: user?.role === "admin",
         login,
         logout,
+        updateUser,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

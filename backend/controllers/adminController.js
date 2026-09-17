@@ -16,6 +16,8 @@ const getDashboardStats = async(req, res, next) => {
             deliveredOrders,
             revenueResult,
             recentOrders,
+            lowStockProductList,
+            recentProducts,
         ] = await Promise.all([
             Product.countDocuments(),
             Order.countDocuments(),
@@ -29,6 +31,12 @@ const getDashboardStats = async(req, res, next) => {
             ]),
             Order.find()
                 .populate("user", "name email")
+                .sort({ createdAt: -1 })
+                .limit(5),
+            Product.find({ stock: { $gt: 0, $lte: 5 } })
+                .sort({ stock: 1 })
+                .limit(5),
+            Product.find()
                 .sort({ createdAt: -1 })
                 .limit(5),
         ]);
@@ -48,6 +56,8 @@ const getDashboardStats = async(req, res, next) => {
                 outOfStockProducts,
             },
             recentOrders,
+            lowStockProductList,
+            recentProducts,
         });
     } catch (error) {
         next(error);

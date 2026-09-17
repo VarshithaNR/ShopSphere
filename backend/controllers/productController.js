@@ -180,6 +180,36 @@ const getProductById = async(req, res, next) => {
     }
 };
 
+// GET /api/products/:id/related — a handful of other products in the same
+// category, for the "Related products" section on the product details page.
+const getRelatedProducts = async(req, res, next) => {
+    try {
+        if (!isValidObjectId(req.params.id)) {
+            throw new AppError(400, "Invalid product ID");
+        }
+
+        const product = await Product.findById(req.params.id);
+
+        if (!product) {
+            throw new AppError(404, "Product not found");
+        }
+
+        const related = await Product.find({
+                category: product.category,
+                _id: { $ne: product._id },
+            })
+            .sort({ rating: -1, createdAt: -1 })
+            .limit(8);
+
+        res.status(200).json({
+            success: true,
+            products: related,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 const updateProduct = async(req, res, next) => {
     try {
         if (!isValidObjectId(req.params.id)) {
@@ -235,6 +265,7 @@ module.exports = {
     getProducts,
     createProduct,
     getProductById,
+    getRelatedProducts,
     updateProduct,
     deleteProduct,
 };

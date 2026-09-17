@@ -18,6 +18,7 @@ function AdminOrders() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [statusFilter, setStatusFilter] = useState("");
+    const [paymentFilter, setPaymentFilter] = useState("");
     const [search, setSearch] = useState("");
     const [updatingId, setUpdatingId] = useState(null);
 
@@ -27,6 +28,7 @@ function AdminOrders() {
         try {
             const data = await getAllOrders({
                 status: statusFilter || undefined,
+                paymentMethod: paymentFilter || undefined,
                 search: search || undefined,
             });
             setOrders(data.orders);
@@ -41,7 +43,7 @@ function AdminOrders() {
         const timer = setTimeout(fetchOrders, search ? 350 : 0);
         return () => clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [statusFilter, search]);
+    }, [statusFilter, paymentFilter, search]);
 
     const handleStatusChange = async (orderId, newStatus) => {
         setUpdatingId(orderId);
@@ -81,6 +83,17 @@ function AdminOrders() {
                     {STATUS_OPTIONS.map((status) => (
                         <option key={status} value={status}>{status}</option>
                     ))}
+                </select>
+                <select
+                    className="input select"
+                    value={paymentFilter}
+                    onChange={(e) => setPaymentFilter(e.target.value)}
+                    aria-label="Filter by payment method"
+                >
+                    <option value="">All Payment Methods</option>
+                    <option value="Cash on Delivery">Cash on Delivery</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Card">Card</option>
                 </select>
             </div>
 

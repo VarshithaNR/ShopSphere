@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { getProductById } from "../api/productApi";
+import { getProductById, getRelatedProducts } from "../api/productApi";
 import { getProductReviews, createReview } from "../api/reviewApi";
 import { getErrorMessage } from "../api/client";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
+import { useWishlist } from "../context/WishlistContext";
 import { useToast } from "../context/ToastContext";
 import StarRating from "../components/StarRating";
 import QuantitySelector from "../components/QuantitySelector";
 import Spinner from "../components/Spinner";
 import StateMessage from "../components/StateMessage";
+import ProductCard from "../components/ProductCard";
 
 function ReviewForm({ productId, onSubmitted }) {
     const toast = useToast();
@@ -80,6 +82,7 @@ function ProductDetails() {
     const navigate = useNavigate();
     const { addToCart } = useCart();
     const { isAuthenticated, user } = useAuth();
+    const { isInWishlist, toggleWishlist } = useWishlist();
     const toast = useToast();
 
     const [product, setProduct] = useState(null);
@@ -89,6 +92,8 @@ function ProductDetails() {
 
     const [reviews, setReviews] = useState([]);
     const [reviewsLoading, setReviewsLoading] = useState(true);
+
+    const [relatedProducts, setRelatedProducts] = useState([]);
 
     useEffect(() => {
         let cancelled = false;
@@ -125,6 +130,14 @@ function ProductDetails() {
         return () => { cancelled = true; };
     }, [id]);
 
+    useEffect(() => {
+        let cancelled = false;
+        getRelatedProducts(id)
+            .then((data) => !cancelled && setRelatedProducts(data.products || []))
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [id]);
+
     const handleAddToCart = () => {
         if (!product || product.stock <= 0) return;
         const result = addToCart(product, quantity);
@@ -143,6 +156,17 @@ function ProductDetails() {
             return;
         }
         navigate("/cart");
+    };
+
+    const handleWishlistClick = async () => {
+        if (!isAuthenticated) {
+            toast.info("Log in to save items to your wishlist.");
+            return;
+        }
+        const result = await toggleWishlist(product);
+        if (!result.ok) {
+            toast.error(result.message);
+        }
     };
 
     const alreadyReviewed = isAuthenticated && reviews.some((r) => r.user?._id === user?.id);
@@ -165,6 +189,7 @@ function ProductDetails() {
     }
 
     const isOutOfStock = product.stock <= 0;
+    const inWishlist = isAuthenticated && isInWishlist(product._id);
 
     return (
         <div className="page page--medium">
@@ -222,6 +247,14 @@ function ProductDetails() {
                                 Buy Now
                             </button>
                         )}
+                        <button
+                            type="button"
+                            className="btn btn--outline"
+                            onClick={handleWishlistClick}
+                            aria-pressed={inWishlist}
+                        >
+                            {inWishlist ? "♥ Saved" : "♡ Save for Later"}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -269,6 +302,18 @@ function ProductDetails() {
                     )}
                 </div>
             </section>
+
+            {relatedProducts.length > 0 && (
+                <section style={{ marginTop: 40 }}>
+                    <hr className="divider" />
+                    <h2>Related Products</h2>
+                    <div className="grid">
+                        {relatedProducts.map((related) => (
+                            <ProductCard key={related._id} product={related} />
+                        ))}
+                    </div>
+                </section>
+            )}
         </div>
     );
 }
